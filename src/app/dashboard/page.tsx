@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useQuery, gql } from "@apollo/client";
-import { useAuth } from "@/contexts/auth-context";
+//import { useAuth } from "@/contexts/auth-context";
 import {
   Box,
   Button,
@@ -29,7 +28,7 @@ const GET_BOARDS = gql`
 `;
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  //const { user } = useAuth();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { data, loading, error } = useQuery(GET_BOARDS);
 
