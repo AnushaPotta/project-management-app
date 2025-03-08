@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useQuery, useMutation, gql } from "@apollo/client";
+import { useQuery, useMutation, gql, ApolloCache } from "@apollo/client";
 import { DragDropContext, Droppable, DropResult } from "react-beautiful-dnd";
 import {
   Box,
@@ -11,13 +11,30 @@ import {
   Icon,
   IconButton,
   Input,
-  Text,
   useDisclosure,
   useToast,
 } from "@chakra-ui/react";
 import { FiPlus, FiMoreHorizontal, FiEdit2 } from "react-icons/fi";
 import Column from "@/components/board/Column";
 import AddColumnModal from "@/components/board/AddColumnModal";
+
+// Define types for our GraphQL data
+interface Board {
+  id: string;
+  title: string;
+}
+
+interface Column {
+  id: string;
+  title: string;
+  boardId: string;
+  order: number;
+}
+
+interface BoardData {
+  board: Board;
+  columns: Column[];
+}
 
 const GET_BOARD = gql`
   query GetBoard($id: ID!) {
@@ -69,7 +86,7 @@ export default function BoardPage({ params }: { params: { boardId: string } }) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [boardTitle, setBoardTitle] = useState("");
 
-  const { data, loading, error } = useQuery(GET_BOARD, {
+  const { data, loading, error } = useQuery<BoardData>(GET_BOARD, {
     variables: { id: boardId },
     fetchPolicy: "network-only",
   });
@@ -110,16 +127,16 @@ export default function BoardPage({ params }: { params: { boardId: string } }) {
             __typename: "Column",
           },
         },
-        update: (cache) => {
+        update: (cache: ApolloCache<BoardData>) => {
           // Update the cache to reflect the new order
-          const data: any = cache.readQuery({
+          const cachedData = cache.readQuery<BoardData>({
             query: GET_BOARD,
             variables: { id: boardId },
           });
 
-          if (!data) return;
+          if (!cachedData) return;
 
-          const newColumns = [...data.columns];
+          const newColumns = [...cachedData.columns];
           const movedColumn = newColumns.find((col) => col.id === draggableId);
 
           if (!movedColumn) return;
@@ -139,12 +156,12 @@ export default function BoardPage({ params }: { params: { boardId: string } }) {
             query: GET_BOARD,
             variables: { id: boardId },
             data: {
-              ...data,
+              ...cachedData,
               columns: updatedColumns,
             },
           });
         },
-      }).catch((error) => {
+      }).catch((error: Error) => {
         toast({
           title: "Error moving column",
           description: error.message,
@@ -163,7 +180,7 @@ export default function BoardPage({ params }: { params: { boardId: string } }) {
         columnId: destination.droppableId,
         order: destination.index,
       },
-    }).catch((error) => {
+    }).catch((error: Error) => {
       toast({
         title: "Error moving card",
         description: error.message,
@@ -190,7 +207,7 @@ export default function BoardPage({ params }: { params: { boardId: string } }) {
           duration: 2000,
         });
       })
-      .catch((error) => {
+      .catch((error: Error) => {
         toast({
           title: "Error updating board title",
           description: error.message,
@@ -202,6 +219,7 @@ export default function BoardPage({ params }: { params: { boardId: string } }) {
 
   if (loading) return <Box p={8}>Loading board...</Box>;
   if (error) return <Box p={8}>Error loading board: {error.message}</Box>;
+  if (!data) return <Box p={8}>No board data found</Box>;
 
   return (
     <Box height="calc(100vh - 64px)" display="flex" flexDirection="column">
@@ -260,8 +278,8 @@ export default function BoardPage({ params }: { params: { boardId: string } }) {
             >
               {data.columns
                 .slice()
-                .sort((a: any, b: any) => a.order - b.order)
-                .map((column: any, index: number) => (
+                .sort((a, b) => a.order - b.order)
+                .map((column, index) => (
                   <Column
                     key={column.id}
                     column={column}

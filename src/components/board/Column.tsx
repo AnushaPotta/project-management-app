@@ -23,6 +23,27 @@ import { FiPlus, FiMoreHorizontal, FiEdit2, FiTrash2 } from "react-icons/fi";
 import Card from "./Card";
 import AddCardModal from "./AddCardModal";
 
+// Define types for our GraphQL data
+interface CardType {
+  id: string;
+  title: string;
+  description?: string;
+  order: number;
+  labels?: string[];
+  dueDate?: string;
+}
+
+interface CardsData {
+  cards: CardType[];
+}
+
+interface ColumnType {
+  id: string;
+  title: string;
+  boardId: string;
+  order: number;
+}
+
 const GET_CARDS = gql`
   query GetCards($columnId: ID!) {
     cards(columnId: $columnId) {
@@ -30,6 +51,8 @@ const GET_CARDS = gql`
       title
       description
       order
+      labels
+      dueDate
     }
   }
 `;
@@ -50,12 +73,7 @@ const DELETE_COLUMN = gql`
 `;
 
 interface ColumnProps {
-  column: {
-    id: string;
-    title: string;
-    boardId: string;
-    order: number;
-  };
+  column: ColumnType;
   index: number;
   boardId: string;
 }
@@ -67,7 +85,7 @@ export default function Column({ column, index, boardId }: ColumnProps) {
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { data, loading, error } = useQuery(GET_CARDS, {
+  const { data, loading, error } = useQuery<CardsData>(GET_CARDS, {
     variables: { columnId: column.id },
     fetchPolicy: "network-only",
   });
@@ -108,7 +126,7 @@ export default function Column({ column, index, boardId }: ColumnProps) {
           duration: 2000,
         });
       })
-      .catch((error) => {
+      .catch((error: Error) => {
         toast({
           title: "Error updating column title",
           description: error.message,
@@ -139,7 +157,7 @@ export default function Column({ column, index, boardId }: ColumnProps) {
           duration: 2000,
         });
       })
-      .catch((error) => {
+      .catch((error: Error) => {
         toast({
           title: "Error deleting column",
           description: error.message,
@@ -239,18 +257,27 @@ export default function Column({ column, index, boardId }: ColumnProps) {
                   <Text fontSize="sm" color="red.500">
                     Error loading cards
                   </Text>
-                ) : (
+                ) : data && data.cards.length > 0 ? (
                   data.cards
                     .slice()
-                    .sort((a: any, b: any) => a.order - b.order)
-                    .map((card: any, index: number) => (
+                    .sort((a, b) => a.order - b.order)
+                    .map((card, cardIndex) => (
                       <Card
                         key={card.id}
                         card={card}
-                        index={index}
+                        index={cardIndex}
                         columnId={column.id}
                       />
                     ))
+                ) : (
+                  <Text
+                    fontSize="sm"
+                    color="gray.500"
+                    textAlign="center"
+                    py={2}
+                  >
+                    No cards yet
+                  </Text>
                 )}
                 {provided.placeholder}
               </Box>

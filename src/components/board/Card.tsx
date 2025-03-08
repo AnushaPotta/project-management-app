@@ -6,12 +6,10 @@ import {
   Box,
   Flex,
   Text,
-  IconButton,
   useDisclosure,
   useToast,
   Badge,
 } from "@chakra-ui/react";
-import { FiEdit2 } from "react-icons/fi";
 import CardModal from "./CardModal";
 
 const DELETE_CARD = gql`
