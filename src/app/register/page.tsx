@@ -21,6 +21,7 @@ import { FcGoogle } from "react-icons/fc";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
+import { FirebaseError } from "firebase/app";
 
 export default function Register() {
   const [email, setEmail] = useState("");
@@ -76,10 +77,12 @@ export default function Register() {
         duration: 3000,
       });
       router.push("/dashboard");
-    } catch (error: any) {
+    } catch (error) {
+      const firebaseError = error as FirebaseError;
       toast({
         title: "Registration failed",
-        description: error.message,
+        description:
+          firebaseError.message || "An error occurred during registration",
         status: "error",
         duration: 5000,
       });
@@ -93,10 +96,12 @@ export default function Register() {
     try {
       await signInWithGoogle();
       router.push("/dashboard");
-    } catch (error: any) {
+    } catch (error) {
+      const firebaseError = error as FirebaseError;
       toast({
         title: "Google sign-in failed",
-        description: error.message,
+        description:
+          firebaseError.message || "An error occurred during Google sign-in",
         status: "error",
         duration: 5000,
       });
@@ -204,7 +209,10 @@ export default function Register() {
 
         <Text textAlign="center">
           Already have an account?{" "}
-          <Link href="/login" style={{ color: "var(--chakra-colors-brand-500)" }}>
+          <Link
+            href="/login"
+            style={{ color: "var(--chakra-colors-brand-500)" }}
+          >
             Log in
           </Link>
         </Text>

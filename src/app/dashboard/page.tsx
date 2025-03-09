@@ -1,7 +1,8 @@
+// app/dashboard/page.tsx
 "use client";
 
+import ProtectedRoute from "@/components/ProtectedRoute";
 import { useQuery, gql } from "@apollo/client";
-//import { useAuth } from "@/contexts/auth-context";
 import {
   Box,
   Button,
@@ -27,8 +28,7 @@ const GET_BOARDS = gql`
   }
 `;
 
-export default function Dashboard() {
-  //const { user } = useAuth();
+function DashboardContent() {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { data, loading, error } = useQuery(GET_BOARDS);
 
@@ -120,5 +120,13 @@ export default function Dashboard() {
 
       <CreateBoardModal isOpen={isOpen} onClose={onClose} />
     </Container>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
   );
 }

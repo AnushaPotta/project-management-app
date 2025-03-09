@@ -21,6 +21,7 @@ import { FcGoogle } from "react-icons/fc";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
+import { FirebaseError } from "firebase/app";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -57,10 +58,11 @@ export default function Login() {
     try {
       await login(email, password);
       router.push("/dashboard");
-    } catch (error: any) {
+    } catch (error) {
+      const firebaseError = error as FirebaseError;
       toast({
         title: "Login failed",
-        description: error.message,
+        description: firebaseError.message || "An error occurred during login",
         status: "error",
         duration: 5000,
       });
@@ -74,10 +76,12 @@ export default function Login() {
     try {
       await signInWithGoogle();
       router.push("/dashboard");
-    } catch (error: any) {
+    } catch (error) {
+      const firebaseError = error as FirebaseError;
       toast({
         title: "Google sign-in failed",
-        description: error.message,
+        description:
+          firebaseError.message || "An error occurred during Google sign-in",
         status: "error",
         duration: 5000,
       });
@@ -100,10 +104,13 @@ export default function Login() {
         status: "success",
         duration: 5000,
       });
-    } catch (error: any) {
+    } catch (error) {
+      const firebaseError = error as FirebaseError;
       toast({
         title: "Failed to send reset email",
-        description: error.message,
+        description:
+          firebaseError.message ||
+          "An error occurred while sending reset email",
         status: "error",
         duration: 5000,
       });
@@ -117,9 +124,7 @@ export default function Login() {
           <Heading as="h1" size="xl" mb={2}>
             Welcome back
           </Heading>
-          <Text color="gray.600">
-            Log in to your TaskFlow account
-          </Text>
+          <Text color="gray.600">Log in to your TaskFlow account</Text>
         </Box>
 
         <Button
@@ -193,7 +198,10 @@ export default function Login() {
 
         <Text textAlign="center">
           Don&apos;t have an account?{" "}
-          <Link href="/register" style={{ color: "var(--chakra-colors-brand-500)" }}>
+          <Link
+            href="/register"
+            style={{ color: "var(--chakra-colors-brand-500)" }}
+          >
             Sign up
           </Link>
         </Text>

@@ -1,13 +1,11 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import { Providers } from "../app/chakra-ui/providers";
+// app/layout.tsx
+"use client";
 
-const inter = Inter({ subsets: ["latin"] });
-
-export const metadata: Metadata = {
-  title: "Trello Clone",
-  description: "A project management tool built with Next.js",
-};
+import { ChakraProvider, Box } from "@chakra-ui/react";
+import { ApolloProvider } from "@apollo/client";
+import { AuthProvider } from "@/contexts/auth-context";
+import { theme } from "@/app/chakra-ui/providers";
+import { client } from "@/lib/apollo-client";
 
 export default function RootLayout({
   children,
@@ -16,8 +14,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <Providers>{children}</Providers>
+      <body>
+        <ChakraProvider theme={theme}>
+          <ApolloProvider client={client}>
+            <AuthProvider>
+              <Box minH="100vh">{children}</Box>
+            </AuthProvider>
+          </ApolloProvider>
+        </ChakraProvider>
       </body>
     </html>
   );
