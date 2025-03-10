@@ -1,7 +1,13 @@
+// contexts/auth-context.tsx
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { User, onAuthStateChanged } from "firebase/auth";
+import {
+  User,
+  onAuthStateChanged,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+} from "firebase/auth";
 import {
   auth,
   signInWithGoogle,
@@ -10,6 +16,9 @@ import {
   sendPasswordReset,
   logout,
   updateUserProfile,
+  sendEmailVerification,
+  deleteUserAccount,
+  updateUserPassword,
 } from "@/lib/firebase";
 
 type AuthContextType = {
@@ -28,6 +37,12 @@ type AuthContextType = {
     displayName?: string;
     photoURL?: string;
   }) => Promise<User | null>;
+  verifyEmail: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
+  updatePassword: (
+    currentPassword: string,
+    newPassword: string
+  ) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -49,6 +64,15 @@ const AuthContext = createContext<AuthContextType>({
     throw new Error("Not implemented");
   },
   updateProfile: async () => {
+    throw new Error("Not implemented");
+  },
+  verifyEmail: async () => {
+    throw new Error("Not implemented");
+  },
+  deleteAccount: async () => {
+    throw new Error("Not implemented");
+  },
+  updatePassword: async () => {
     throw new Error("Not implemented");
   },
 });
@@ -90,6 +114,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return updateUserProfile(user, profile);
   };
 
+  const verifyEmail = async () => {
+    if (!user) throw new Error("No user logged in");
+    return sendEmailVerification(user);
+  };
+
+  const deleteAccount = async () => {
+    if (!user) throw new Error("No user logged in");
+    return deleteUserAccount(user);
+  };
+
+  const updatePassword = async (
+    currentPassword: string,
+    newPassword: string
+  ) => {
+    if (!user || !user.email) throw new Error("No user logged in or no email");
+
+    // First re-authenticate the user
+    const credential = EmailAuthProvider.credential(
+      user.email,
+      currentPassword
+    );
+    await reauthenticateWithCredential(user, credential);
+
+    // Then update the password
+    return updateUserPassword(user, newPassword);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -98,9 +149,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signInWithGoogle,
         login,
         register,
-        resetPassword: resetPassword,
+        resetPassword,
         logout,
         updateProfile: updateProfileData,
+        verifyEmail,
+        deleteAccount,
+        updatePassword,
       }}
     >
       {children}
