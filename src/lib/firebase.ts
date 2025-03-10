@@ -1,4 +1,4 @@
-// src/lib/firebase.ts
+// lib/firebase.ts
 "use client";
 
 import { initializeApp, getApps, getApp } from "firebase/app";
@@ -12,12 +12,14 @@ import {
   signOut,
   updateProfile,
   User,
+  sendEmailVerification as firebaseSendEmailVerification,
+  deleteUser,
+  updatePassword as firebaseUpdatePassword,
 } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 // Your Firebase configuration
-// Replace these values with your actual Firebase project config
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -68,6 +70,9 @@ const registerWithEmailAndPassword = async (
     // Update the user's profile with the display name
     await updateProfile(user, { displayName });
 
+    // Send email verification
+    await sendEmailVerification(user);
+
     return user;
   } catch (error) {
     console.error("Error registering with email and password:", error);
@@ -106,6 +111,33 @@ const updateUserProfile = async (
   }
 };
 
+const sendEmailVerification = async (user: User) => {
+  try {
+    await firebaseSendEmailVerification(user);
+  } catch (error) {
+    console.error("Error sending email verification:", error);
+    throw error;
+  }
+};
+
+const deleteUserAccount = async (user: User) => {
+  try {
+    await deleteUser(user);
+  } catch (error) {
+    console.error("Error deleting user account:", error);
+    throw error;
+  }
+};
+
+const updateUserPassword = async (user: User, newPassword: string) => {
+  try {
+    await firebaseUpdatePassword(user, newPassword);
+  } catch (error) {
+    console.error("Error updating password:", error);
+    throw error;
+  }
+};
+
 export {
   auth,
   db,
@@ -116,4 +148,7 @@ export {
   sendPasswordReset,
   logout,
   updateUserProfile,
+  sendEmailVerification,
+  deleteUserAccount,
+  updateUserPassword,
 };
