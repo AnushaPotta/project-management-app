@@ -3,6 +3,7 @@
 
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useQuery, gql } from "@apollo/client";
+import { useAuth } from "@/contexts/auth-context";
 import {
   Box,
   Button,
@@ -14,6 +15,10 @@ import {
   Text,
   useDisclosure,
   useColorModeValue,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
 } from "@chakra-ui/react";
 import { FiPlus } from "react-icons/fi";
 import Link from "next/link";
@@ -29,11 +34,14 @@ const GET_BOARDS = gql`
 `;
 
 function DashboardContent() {
+  const { user } = useAuth();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { data, loading, error } = useQuery(GET_BOARDS);
 
   const bgColor = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.700");
+
+  const isEmailVerified = user?.emailVerified;
 
   if (loading) {
     return (
@@ -53,12 +61,25 @@ function DashboardContent() {
 
   return (
     <Container maxW="container.xl" py={8}>
+      {!isEmailVerified && (
+        <Alert status="warning" mb={6} borderRadius="md">
+          <AlertIcon />
+          <Box flex="1">
+            <AlertTitle>Email not verified</AlertTitle>
+            <AlertDescription display="block">
+              Some features may be limited until you verify your email address.
+            </AlertDescription>
+          </Box>
+        </Alert>
+      )}
+
       <Flex justify="space-between" align="center" mb={8}>
         <Heading size="lg">Your Boards</Heading>
         <Button
           leftIcon={<Icon as={FiPlus} />}
           colorScheme="brand"
           onClick={onOpen}
+          isDisabled={!isEmailVerified}
         >
           Create Board
         </Button>
@@ -94,28 +115,31 @@ function DashboardContent() {
           </Link>
         ))}
 
-        <Box
-          height="150px"
-          p={4}
-          borderRadius="md"
-          borderWidth="1px"
-          borderColor={borderColor}
-          borderStyle="dashed"
-          display="flex"
-          justifyContent="center"
-          alignItems="center"
-          cursor="pointer"
-          _hover={{
-            bg: "gray.50",
-            borderColor: "brand.500",
-          }}
-          onClick={onOpen}
-        >
-          <Flex direction="column" align="center">
-            <Icon as={FiPlus} fontSize="2xl" mb={2} />
-            <Text>Create New Board</Text>
-          </Flex>
-        </Box>
+        {isEmailVerified && (
+          <Box
+            height="150px"
+            p={4}
+            borderRadius="md"
+            borderWidth="1px"
+            borderColor={borderColor}
+            borderStyle="dashed"
+            display="flex"
+            justifyContent="center"
+            alignItems="center"
+            cursor={isEmailVerified ? "pointer" : "not-allowed"}
+            opacity={isEmailVerified ? 1 : 0.6}
+            _hover={{
+              bg: isEmailVerified ? "gray.50" : undefined,
+              borderColor: isEmailVerified ? "brand.500" : undefined,
+            }}
+            onClick={isEmailVerified ? onOpen : undefined}
+          >
+            <Flex direction="column" align="center">
+              <Icon as={FiPlus} fontSize="2xl" mb={2} />
+              <Text>Create New Board</Text>
+            </Flex>
+          </Box>
+        )}
       </Grid>
 
       <CreateBoardModal isOpen={isOpen} onClose={onClose} />

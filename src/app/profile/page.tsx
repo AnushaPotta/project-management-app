@@ -24,6 +24,7 @@ import {
   AlertDialogOverlay,
   useDisclosure,
 } from "@chakra-ui/react";
+
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -50,7 +51,9 @@ function ProfileContent() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const cancelRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(
+    null
+  ) as React.RefObject<HTMLButtonElement>;
 
   const toast = useToast();
   const router = useRouter();

@@ -1,11 +1,12 @@
 // app/layout.tsx
 "use client";
 
-import { ChakraProvider, Box } from "@chakra-ui/react";
 import { ApolloProvider } from "@apollo/client";
 import { AuthProvider } from "@/contexts/auth-context";
-import { theme } from "@/app/chakra-ui/providers";
 import { client } from "@/lib/apollo-client";
+import { Providers } from "./chakra-ui/providers";
+import Navbar from "@/components/Navbar";
+import EmailVerificationBanner from "@/components/EmailVerificationBanner";
 
 export default function RootLayout({
   children,
@@ -15,13 +16,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <ChakraProvider theme={theme}>
+        <Providers>
           <ApolloProvider client={client}>
             <AuthProvider>
-              <Box minH="100vh">{children}</Box>
+              <Navbar />
+              <EmailVerificationBanner />
+              {children}
             </AuthProvider>
           </ApolloProvider>
-        </ChakraProvider>
+        </Providers>
       </body>
     </html>
   );
