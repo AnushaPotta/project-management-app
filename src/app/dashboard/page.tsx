@@ -1,156 +1,69 @@
-// app/dashboard/page.tsx
+// src/app/dashboard/page.tsx
 "use client";
 
-import ProtectedRoute from "@/components/ProtectedRoute";
-import { useQuery, gql } from "@apollo/client";
+import { Container, useToast } from "@chakra-ui/react";
+import { BoardList } from "@/components/board/BoardList";
+import { useRouter } from "next/navigation";
+import { useQuery, useMutation } from "@apollo/client";
+import { GET_USER_BOARDS, CREATE_BOARD } from "@/graphql/board";
 import { useAuth } from "@/contexts/auth-context";
-import {
-  Box,
-  Button,
-  Container,
-  Flex,
-  Grid,
-  Heading,
-  Icon,
-  Text,
-  useDisclosure,
-  useColorModeValue,
-  Alert,
-  AlertIcon,
-  AlertTitle,
-  AlertDescription,
-} from "@chakra-ui/react";
-import { FiPlus } from "react-icons/fi";
-import Link from "next/link";
-import CreateBoardModal from "@/components/board/CreateBoardModal";
+import { LoadingState } from "@/components/ui/LoadingState";
 
-const GET_BOARDS = gql`
-  query GetBoards {
-    boards {
-      id
-      title
-    }
-  }
-`;
-
-function DashboardContent() {
+export default function DashboardPage() {
+  const router = useRouter();
+  const toast = useToast();
   const { user } = useAuth();
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const { data, loading, error } = useQuery(GET_BOARDS);
 
-  const bgColor = useColorModeValue("white", "gray.800");
-  const borderColor = useColorModeValue("gray.200", "gray.700");
+  const { data, loading, error } = useQuery(GET_USER_BOARDS);
+  const [createBoard] = useMutation(CREATE_BOARD);
 
-  const isEmailVerified = user?.emailVerified;
-
-  if (loading) {
-    return (
-      <Container maxW="container.xl" py={8}>
-        <Text>Loading your boards...</Text>
-      </Container>
-    );
+  if (!user) {
+    router.push("/login");
+    return null;
   }
+
+  if (loading) return <LoadingState />;
 
   if (error) {
-    return (
-      <Container maxW="container.xl" py={8}>
-        <Text color="red.500">Error loading boards: {error.message}</Text>
-      </Container>
-    );
+    toast({
+      title: "Error loading boards",
+      description: error.message,
+      status: "error",
+      duration: 5000,
+    });
   }
 
+  const handleBoardClick = (boardId: string) => {
+    router.push(`/board/${boardId}`);
+  };
+
+  const handleCreateBoard = async (boardData: any) => {
+    try {
+      const { data } = await createBoard({
+        variables: {
+          input: boardData,
+        },
+        refetchQueries: [{ query: GET_USER_BOARDS }],
+      });
+
+      router.push(`/board/${data.createBoard.id}`);
+    } catch (error) {
+      toast({
+        title: "Error creating board",
+        description: error.message,
+        status: "error",
+        duration: 5000,
+      });
+    }
+  };
+
   return (
-    <Container maxW="container.xl" py={8}>
-      {!isEmailVerified && (
-        <Alert status="warning" mb={6} borderRadius="md">
-          <AlertIcon />
-          <Box flex="1">
-            <AlertTitle>Email not verified</AlertTitle>
-            <AlertDescription display="block">
-              Some features may be limited until you verify your email address.
-            </AlertDescription>
-          </Box>
-        </Alert>
-      )}
-
-      <Flex justify="space-between" align="center" mb={8}>
-        <Heading size="lg">Your Boards</Heading>
-        <Button
-          leftIcon={<Icon as={FiPlus} />}
-          colorScheme="brand"
-          onClick={onOpen}
-          isDisabled={!isEmailVerified}
-        >
-          Create Board
-        </Button>
-      </Flex>
-
-      <Grid templateColumns="repeat(auto-fill, minmax(250px, 1fr))" gap={6}>
-        {data?.boards.map((board: { id: string; title: string }) => (
-          <Link key={board.id} href={`/board/${board.id}`} passHref>
-            <Box
-              as="a"
-              height="150px"
-              p={4}
-              borderRadius="md"
-              bg={bgColor}
-              borderWidth="1px"
-              borderColor={borderColor}
-              boxShadow="md"
-              transition="transform 0.2s"
-              _hover={{
-                transform: "translateY(-4px)",
-                boxShadow: "lg",
-                borderColor: "brand.500",
-              }}
-              display="flex"
-              flexDirection="column"
-              justifyContent="center"
-              alignItems="center"
-            >
-              <Heading size="md" textAlign="center">
-                {board.title}
-              </Heading>
-            </Box>
-          </Link>
-        ))}
-
-        {isEmailVerified && (
-          <Box
-            height="150px"
-            p={4}
-            borderRadius="md"
-            borderWidth="1px"
-            borderColor={borderColor}
-            borderStyle="dashed"
-            display="flex"
-            justifyContent="center"
-            alignItems="center"
-            cursor={isEmailVerified ? "pointer" : "not-allowed"}
-            opacity={isEmailVerified ? 1 : 0.6}
-            _hover={{
-              bg: isEmailVerified ? "gray.50" : undefined,
-              borderColor: isEmailVerified ? "brand.500" : undefined,
-            }}
-            onClick={isEmailVerified ? onOpen : undefined}
-          >
-            <Flex direction="column" align="center">
-              <Icon as={FiPlus} fontSize="2xl" mb={2} />
-              <Text>Create New Board</Text>
-            </Flex>
-          </Box>
-        )}
-      </Grid>
-
-      <CreateBoardModal isOpen={isOpen} onClose={onClose} />
+    <Container maxW="container.xl" py={6}>
+      <BoardList
+        boards={data?.boards || []}
+        onBoardClick={handleBoardClick}
+        onCreateBoard={handleCreateBoard}
+      />
     </Container>
-  );
-}
-
-export default function Dashboard() {
-  return (
-    <ProtectedRoute>
-      <DashboardContent />
-    </ProtectedRoute>
   );
 }
