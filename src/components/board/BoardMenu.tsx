@@ -6,7 +6,6 @@ import {
   MenuItem,
   MenuDivider,
   IconButton,
-  useDisclosure,
 } from "@chakra-ui/react";
 import { FiMoreHorizontal, FiTrash2, FiArchive, FiEdit } from "react-icons/fi";
 

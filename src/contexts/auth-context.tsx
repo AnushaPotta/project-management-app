@@ -8,6 +8,11 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   sendPasswordResetEmail,
+  sendEmailVerification,
+  deleteUser,
+  updatePassword as firebaseUpdatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
   updateProfile as firebaseUpdateProfile,
   onAuthStateChanged,
 } from "firebase/auth";
@@ -17,10 +22,16 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   register: (email: string, password: string, name: string) => Promise<void>;
-  login: (email: string, password: string) => Promise<void>; // Added login
+  login: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
-  resetPassword: (email: string) => Promise<void>; // Added resetPassword
+  resetPassword: (email: string) => Promise<void>;
+  verifyEmail: () => Promise<void>;
+  updatePassword: (
+    currentPassword: string,
+    newPassword: string
+  ) => Promise<void>;
+  deleteAccount: () => Promise<void>;
   updateProfile: (data: {
     displayName?: string;
     photoURL?: string;
@@ -72,11 +83,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await sendPasswordResetEmail(auth, email);
   };
 
+  const verifyEmail = async () => {
+    if (!user) throw new Error("No user logged in");
+    await sendEmailVerification(user);
+  };
+
+  const updatePassword = async (
+    currentPassword: string,
+    newPassword: string
+  ) => {
+    if (!user || !user.email) throw new Error("No user logged in");
+
+    // Re-authenticate user before updating password
+    const credential = EmailAuthProvider.credential(
+      user.email,
+      currentPassword
+    );
+    await reauthenticateWithCredential(user, credential);
+
+    // Update password
+    await firebaseUpdatePassword(user, newPassword);
+  };
+
+  const deleteAccount = async () => {
+    if (!user) throw new Error("No user logged in");
+    await deleteUser(user);
+    setUser(null);
+  };
+
   const updateProfile = async (data: {
     displayName?: string;
     photoURL?: string;
   }) => {
-    if (!user) return;
+    if (!user) throw new Error("No user logged in");
     await firebaseUpdateProfile(user, data);
     setUser({ ...user, ...data });
   };
@@ -89,6 +128,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signInWithGoogle,
     signOut,
     resetPassword,
+    verifyEmail,
+    updatePassword,
+    deleteAccount,
     updateProfile,
   };
 

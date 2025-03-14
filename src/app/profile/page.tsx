@@ -49,6 +49,7 @@ function ProfileContent() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isSendingVerification, setIsSendingVerification] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { isOpen, onOpen, onClose } = useDisclosure();
   const cancelRef = useRef<HTMLButtonElement>(
@@ -187,6 +188,7 @@ function ProfileContent() {
   };
 
   const handleDeleteAccount = async () => {
+    setIsDeleting(true);
     try {
       await deleteAccount();
       toast({
@@ -203,6 +205,8 @@ function ProfileContent() {
         status: "error",
         duration: 5000,
       });
+    } finally {
+      setIsDeleting(false);
       onClose();
     }
   };
@@ -378,7 +382,13 @@ function ProfileContent() {
               <Button ref={cancelRef} onClick={onClose}>
                 Cancel
               </Button>
-              <Button colorScheme="red" onClick={handleDeleteAccount} ml={3}>
+              <Button
+                colorScheme="red"
+                onClick={handleDeleteAccount}
+                ml={3}
+                isLoading={isDeleting}
+                loadingText="Deleting..."
+              >
                 Delete
               </Button>
             </AlertDialogFooter>
