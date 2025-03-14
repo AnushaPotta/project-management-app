@@ -26,8 +26,10 @@ import { FirebaseError } from "firebase/app";
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isEmailLoading, setIsEmailLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isResetLoading, setIsResetLoading] = useState(false);
 
   const { login, signInWithGoogle, resetPassword } = useAuth();
   const router = useRouter();
@@ -50,11 +52,9 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!validateForm()) return;
 
-    setLoading(true);
-
+    setIsEmailLoading(true);
     try {
       await login(email, password);
       router.push("/dashboard");
@@ -67,12 +67,12 @@ export default function Login() {
         duration: 5000,
       });
     } finally {
-      setLoading(false);
+      setIsEmailLoading(false);
     }
   };
 
   const handleGoogleSignIn = async () => {
-    setLoading(true);
+    setIsGoogleLoading(true);
     try {
       await signInWithGoogle();
       router.push("/dashboard");
@@ -86,7 +86,7 @@ export default function Login() {
         duration: 5000,
       });
     } finally {
-      setLoading(false);
+      setIsGoogleLoading(false);
     }
   };
 
@@ -96,6 +96,7 @@ export default function Login() {
       return;
     }
 
+    setIsResetLoading(true);
     try {
       await resetPassword(email);
       toast({
@@ -114,6 +115,8 @@ export default function Login() {
         status: "error",
         duration: 5000,
       });
+    } finally {
+      setIsResetLoading(false);
     }
   };
 
@@ -130,9 +133,11 @@ export default function Login() {
         <Button
           leftIcon={<FcGoogle />}
           onClick={handleGoogleSignIn}
-          isLoading={loading}
+          isLoading={isGoogleLoading}
+          loadingText="Signing in with Google..."
           variant="outline"
           size="lg"
+          disabled={isEmailLoading || isResetLoading}
         >
           Log in with Google
         </Button>
@@ -175,21 +180,22 @@ export default function Login() {
 
             <Button
               variant="link"
-              alignSelf="flex-end"
-              color="brand.500"
               onClick={handleForgotPassword}
-              size="sm"
+              isLoading={isResetLoading}
+              loadingText="Sending reset email..."
+              disabled={isEmailLoading || isGoogleLoading}
             >
               Forgot password?
             </Button>
-
             <Button
               type="submit"
               colorScheme="brand"
               size="lg"
               width="full"
               mt={4}
-              isLoading={loading}
+              isLoading={isEmailLoading}
+              loadingText="Logging in..."
+              disabled={isGoogleLoading || isResetLoading}
             >
               Log In
             </Button>

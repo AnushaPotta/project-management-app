@@ -1,81 +1,33 @@
-// contexts/auth-context.tsx
-"use client";
-
-import { createContext, useContext, useEffect, useState } from "react";
+// src/contexts/auth-context.tsx
+import { createContext, useContext, useState, useEffect } from "react";
 import {
   User,
+  signOut as firebaseSignOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  sendPasswordResetEmail,
+  updateProfile as firebaseUpdateProfile,
   onAuthStateChanged,
-  EmailAuthProvider,
-  reauthenticateWithCredential,
 } from "firebase/auth";
-import {
-  auth,
-  signInWithGoogle,
-  loginWithEmailAndPassword,
-  registerWithEmailAndPassword,
-  sendPasswordReset,
-  logout,
-  updateUserProfile,
-  sendEmailVerification,
-  deleteUserAccount,
-  updateUserPassword,
-} from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 
-type AuthContextType = {
+interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<User>;
-  login: (email: string, password: string) => Promise<User>;
-  register: (
-    email: string,
-    password: string,
-    displayName: string
-  ) => Promise<User>;
-  resetPassword: (email: string) => Promise<void>;
-  logout: () => Promise<void>;
-  updateProfile: (profile: {
+  register: (email: string, password: string, name: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>; // Added login
+  signInWithGoogle: () => Promise<void>;
+  signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>; // Added resetPassword
+  updateProfile: (data: {
     displayName?: string;
     photoURL?: string;
-  }) => Promise<User | null>;
-  verifyEmail: () => Promise<void>;
-  deleteAccount: () => Promise<void>;
-  updatePassword: (
-    currentPassword: string,
-    newPassword: string
-  ) => Promise<void>;
-};
+  }) => Promise<void>;
+}
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  loading: true,
-  signInWithGoogle: async () => {
-    throw new Error("Not implemented");
-  },
-  login: async () => {
-    throw new Error("Not implemented");
-  },
-  register: async () => {
-    throw new Error("Not implemented");
-  },
-  resetPassword: async () => {
-    throw new Error("Not implemented");
-  },
-  logout: async () => {
-    throw new Error("Not implemented");
-  },
-  updateProfile: async () => {
-    throw new Error("Not implemented");
-  },
-  verifyEmail: async () => {
-    throw new Error("Not implemented");
-  },
-  deleteAccount: async () => {
-    throw new Error("Not implemented");
-  },
-  updatePassword: async () => {
-    throw new Error("Not implemented");
-  },
-});
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -90,76 +42,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    return loginWithEmailAndPassword(email, password);
+  const register = async (email: string, password: string, name: string) => {
+    const { user } = await createUserWithEmailAndPassword(
+      auth,
+      email,
+      password
+    );
+    await firebaseUpdateProfile(user, { displayName: name });
+    setUser(user);
   };
 
-  const register = async (
-    email: string,
-    password: string,
-    displayName: string
-  ) => {
-    return registerWithEmailAndPassword(email, password, displayName);
+  const login = async (email: string, password: string) => {
+    const { user } = await signInWithEmailAndPassword(auth, email, password);
+    setUser(user);
+  };
+
+  const signInWithGoogle = async () => {
+    const provider = new GoogleAuthProvider();
+    const { user } = await signInWithPopup(auth, provider);
+    setUser(user);
+  };
+
+  const signOut = async () => {
+    await firebaseSignOut(auth);
+    setUser(null);
   };
 
   const resetPassword = async (email: string) => {
-    return sendPasswordReset(email);
+    await sendPasswordResetEmail(auth, email);
   };
 
-  const updateProfileData = async (profile: {
+  const updateProfile = async (data: {
     displayName?: string;
     photoURL?: string;
   }) => {
-    if (!user) return null;
-    return updateUserProfile(user, profile);
+    if (!user) return;
+    await firebaseUpdateProfile(user, data);
+    setUser({ ...user, ...data });
   };
 
-  const verifyEmail = async () => {
-    if (!user) throw new Error("No user logged in");
-    return sendEmailVerification(user);
-  };
-
-  const deleteAccount = async () => {
-    if (!user) throw new Error("No user logged in");
-    return deleteUserAccount(user);
-  };
-
-  const updatePassword = async (
-    currentPassword: string,
-    newPassword: string
-  ) => {
-    if (!user || !user.email) throw new Error("No user logged in or no email");
-
-    // First re-authenticate the user
-    const credential = EmailAuthProvider.credential(
-      user.email,
-      currentPassword
-    );
-    await reauthenticateWithCredential(user, credential);
-
-    // Then update the password
-    return updateUserPassword(user, newPassword);
+  const value: AuthContextType = {
+    user,
+    loading,
+    register,
+    login,
+    signInWithGoogle,
+    signOut,
+    resetPassword,
+    updateProfile,
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        signInWithGoogle,
-        login,
-        register,
-        resetPassword,
-        logout,
-        updateProfile: updateProfileData,
-        verifyEmail,
-        deleteAccount,
-        updatePassword,
-      }}
-    >
-      {children}
+    <AuthContext.Provider value={value}>
+      {!loading && children}
     </AuthContext.Provider>
   );
 }
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+}

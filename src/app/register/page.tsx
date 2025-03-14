@@ -28,8 +28,9 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
-  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isEmailLoading, setIsEmailLoading] = useState(false);
 
   const { register, signInWithGoogle } = useAuth();
   const router = useRouter();
@@ -67,7 +68,7 @@ export default function Register() {
 
     if (!validateForm()) return;
 
-    setLoading(true);
+    setIsEmailLoading(true); // Use specific loading state for email registration
 
     try {
       await register(email, password, name);
@@ -87,12 +88,12 @@ export default function Register() {
         duration: 5000,
       });
     } finally {
-      setLoading(false);
+      setIsEmailLoading(false);
     }
   };
-
   const handleGoogleSignIn = async () => {
-    setLoading(true);
+    setIsGoogleLoading(true); // Use specific loading state for Google sign-in
+
     try {
       await signInWithGoogle();
       router.push("/dashboard");
@@ -106,7 +107,7 @@ export default function Register() {
         duration: 5000,
       });
     } finally {
-      setLoading(false);
+      setIsGoogleLoading(false);
     }
   };
 
@@ -125,9 +126,11 @@ export default function Register() {
         <Button
           leftIcon={<FcGoogle />}
           onClick={handleGoogleSignIn}
-          isLoading={loading}
+          isLoading={isGoogleLoading}
+          loadingText="Signing up with Google..."
           variant="outline"
           size="lg"
+          disabled={isEmailLoading} // Disable when email registration is in progress
         >
           Sign up with Google
         </Button>
@@ -200,18 +203,27 @@ export default function Register() {
               size="lg"
               width="full"
               mt={4}
-              isLoading={loading}
+              isLoading={isEmailLoading}
+              loadingText="Creating Account..."
+              disabled={isGoogleLoading} // Disable when Google sign-in is in progress
             >
               Create Account
             </Button>
           </VStack>
         </form>
-
-        <Text textAlign="center">
+        {/* Disable link during loading */}
+        <Text
+          textAlign="center"
+          opacity={isEmailLoading || isGoogleLoading ? 0.5 : 1}
+        >
           Already have an account?{" "}
           <Link
             href="/login"
-            style={{ color: "var(--chakra-colors-brand-500)" }}
+            style={{
+              color: "var(--chakra-colors-brand-500)",
+              pointerEvents:
+                isEmailLoading || isGoogleLoading ? "none" : "auto",
+            }}
           >
             Log in
           </Link>
