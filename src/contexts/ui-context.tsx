@@ -6,11 +6,16 @@ interface UIContextType {
     addCard: boolean;
     addColumn: boolean;
     cardDetail: boolean;
+    addMember: boolean; // Add this modal type
   };
-  openModal: (modalName: keyof UIContextType["modals"]) => void;
-  closeModal: (modalName: keyof UIContextType["modals"]) => void;
+  openModal: (
+    modal: "addCard" | "addColumn" | "cardDetail" | "addMember"
+  ) => void;
+  closeModal: (
+    modal: "addCard" | "addColumn" | "cardDetail" | "addMember"
+  ) => void;
   activeColumnId: string | null;
-  setActiveColumnId: (columnId: string | null) => void;
+  setActiveColumnId: (id: string | null) => void;
 }
 
 const UIContext = createContext<UIContextType | undefined>(undefined);
@@ -20,15 +25,21 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
     addCard: false,
     addColumn: false,
     cardDetail: false,
+    addMember: false, // Initialize the new modal state
   });
+
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
 
-  const openModal = (modalName: keyof UIContextType["modals"]) => {
-    setModals((prev) => ({ ...prev, [modalName]: true }));
+  const openModal = (
+    modal: "addCard" | "addColumn" | "cardDetail" | "addMember"
+  ) => {
+    setModals({ ...modals, [modal]: true });
   };
 
-  const closeModal = (modalName: keyof UIContextType["modals"]) => {
-    setModals((prev) => ({ ...prev, [modalName]: false }));
+  const closeModal = (
+    modal: "addCard" | "addColumn" | "cardDetail" | "addMember"
+  ) => {
+    setModals({ ...modals, [modal]: false });
   };
 
   return (

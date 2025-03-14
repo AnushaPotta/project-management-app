@@ -3,9 +3,20 @@ export interface Board {
   id: string;
   title: string;
   description?: string;
+  background?: string;
+  isStarred: boolean;
+  members: BoardMember[];
   columns: Column[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BoardMember {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  role: "owner" | "admin" | "member";
 }
 
 export interface Column {
@@ -21,6 +32,9 @@ export interface Card {
   description?: string;
   order: number;
   columnId: string;
+  assignedTo?: string[];
+  dueDate?: string;
+  labels?: string[];
 }
 
 export interface DragItem {
@@ -29,7 +43,17 @@ export interface DragItem {
   index: number;
 }
 
-export interface CreateBoardInput {
+export interface BoardUpdate {
+  title?: string;
+  description?: string;
+  background?: string;
+  isStarred?: boolean;
+}
+
+export interface CardInput {
   title: string;
   description?: string;
+  dueDate?: string;
+  assignedTo?: string[];
+  labels?: string[];
 }

@@ -7,20 +7,17 @@ import { BoardMembers } from "@/components/board/BoardMembers";
 import Column from "@/components/board/Column";
 import AddColumnModal from "@/components/board/AddColumnModal";
 import AddCardModal from "@/components/board/AddCardModal";
-import { useQuery, useMutation } from "@apollo/client";
-import { ApolloError } from "@apollo/client";
-import { DragDropContext, Droppable } from "react-beautiful-dnd";
-import {
-  GET_BOARD,
-  UPDATE_BOARD,
-  INVITE_MEMBER,
-  REMOVE_MEMBER,
-} from "@/graphql/board";
+import { useQuery } from "@apollo/client";
+import { GET_BOARD } from "@/graphql/board";
 import { useAuth } from "@/contexts/auth-context";
 import { useBoard } from "@/contexts/board-context";
 import { useUI } from "@/contexts/ui-context";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { useRouter } from "next/navigation";
+import { DragDropContext, Droppable, DropResult } from "react-beautiful-dnd";
+import { handleError } from "@/utils/error-handling";
+import { CardInput } from "@/types/board";
+import AddMemberModal from "@/components/board/AddMemberModal";
 
 interface BoardPageProps {
   params: {
@@ -28,12 +25,8 @@ interface BoardPageProps {
   };
 }
 
-export default function BoardPage({ params }: BoardPageProps) {
-  const router = useRouter();
+function BoardContent({ boardId }: { boardId: string }) {
   const toast = useToast();
-  const { user } = useAuth();
-
-  // Context hooks
   const {
     currentBoard,
     setCurrentBoard,
@@ -41,159 +34,127 @@ export default function BoardPage({ params }: BoardPageProps) {
     moveColumn,
     addColumn,
     addCard,
+    updateBoard,
+    inviteMember,
+    removeMember,
   } = useBoard();
 
   const { modals, openModal, closeModal, activeColumnId, setActiveColumnId } =
     useUI();
 
-  // Query for board data
-  const { data, loading, error } = useQuery(GET_BOARD, {
-    variables: { id: params.boardId },
-    onCompleted: (data) => {
-      setCurrentBoard(data.board);
-    },
+  const { loading, error } = useQuery(GET_BOARD, {
+    variables: { id: boardId },
+    onCompleted: (data) => setCurrentBoard(data.board),
+    onError: (error) => handleError(error, toast),
   });
 
-  // Mutations
-  const [updateBoard] = useMutation(UPDATE_BOARD);
-  const [inviteMember] = useMutation(INVITE_MEMBER);
-  const [removeMember] = useMutation(REMOVE_MEMBER);
-
-  if (!user) {
-    router.push("/login");
-    return null;
-  }
-
   if (loading) return <LoadingState />;
-
-  if (error) {
-    toast({
-      title: "Error loading board",
-      description:
-        error instanceof ApolloError
-          ? error.message
-          : "An unknown error occurred",
-      status: "error",
-      duration: 5000,
-    });
-    return null;
-  }
-
-  if (!currentBoard) {
-    router.push("/dashboard");
-    return null;
-  }
+  if (error) return null;
+  if (!currentBoard) return null;
 
   const handleTitleChange = async (newTitle: string) => {
     try {
-      await updateBoard({
-        variables: {
-          id: currentBoard.id,
-          input: { title: newTitle },
-        },
-      });
-      setCurrentBoard({ ...currentBoard, title: newTitle });
-    } catch (err) {
-      const error = err as ApolloError;
+      await updateBoard(currentBoard.id, { title: newTitle });
       toast({
-        title: "Error updating board title",
-        description: error.message || "An unknown error occurred",
-        status: "error",
+        title: "Board updated",
+        status: "success",
+        duration: 2000,
       });
+    } catch (error) {
+      handleError(error, toast);
     }
   };
 
   const handleToggleStar = async () => {
     try {
-      await updateBoard({
-        variables: {
-          id: currentBoard.id,
-          input: { isStarred: !currentBoard.isStarred },
-        },
+      await updateBoard(currentBoard.id, {
+        isStarred: !currentBoard.isStarred,
       });
-      setCurrentBoard({ ...currentBoard, isStarred: !currentBoard.isStarred });
-    } catch (err) {
-      const error = err as ApolloError;
-      toast({
-        title: "Error updating board",
-        description: error.message || "An unknown error occurred",
-        status: "error",
-      });
+    } catch (error) {
+      handleError(error, toast);
     }
   };
 
   const handleInviteMember = async (email: string) => {
     try {
-      const result = await inviteMember({
-        variables: {
-          boardId: currentBoard.id,
-          email,
-        },
-      });
-      setCurrentBoard({
-        ...currentBoard,
-        members: result.data.inviteMember.members,
-      });
+      await inviteMember(currentBoard.id, email);
       toast({
         title: "Invitation sent",
         status: "success",
+        duration: 2000,
       });
-    } catch (err) {
-      const error = err as ApolloError;
-      toast({
-        title: "Error inviting member",
-        description: error.message || "An unknown error occurred",
-        status: "error",
-      });
+    } catch (error) {
+      handleError(error, toast);
     }
   };
 
   const handleRemoveMember = async (memberId: string) => {
     try {
-      const result = await removeMember({
-        variables: {
-          boardId: currentBoard.id,
-          memberId,
-        },
-      });
-      setCurrentBoard({
-        ...currentBoard,
-        members: result.data.removeMember.members,
-      });
+      await removeMember(currentBoard.id, memberId);
       toast({
         title: "Member removed",
         status: "success",
+        duration: 2000,
       });
-    } catch (err) {
-      const error = err as ApolloError;
-      toast({
-        title: "Error removing member",
-        description: error.message || "An unknown error occurred",
-        status: "error",
-      });
+    } catch (error) {
+      handleError(error, toast);
     }
   };
 
-  const handleDragEnd = (result: any) => {
+  const handleDragEnd = async (result: DropResult) => {
     const { source, destination, type } = result;
 
     if (!destination) return;
 
-    if (type === "COLUMN") {
-      moveColumn(source.index, destination.index);
-    } else {
-      moveCard(
-        {
-          id: result.draggableId,
-          columnId: source.droppableId,
-          index: source.index,
-        },
-        {
-          id: result.draggableId,
-          columnId: destination.droppableId,
-          index: destination.index,
-        }
-      );
+    try {
+      if (type === "COLUMN") {
+        await moveColumn(source.index, destination.index);
+      } else {
+        await moveCard(
+          {
+            id: result.draggableId,
+            columnId: source.droppableId,
+            index: source.index,
+          },
+          {
+            id: result.draggableId,
+            columnId: destination.droppableId,
+            index: destination.index,
+          }
+        );
+      }
+    } catch (error) {
+      handleError(error, toast);
+    }
+  };
+
+  const handleAddColumn = async (title: string) => {
+    try {
+      await addColumn(title);
+      closeModal("addColumn");
+      toast({
+        title: "Column added",
+        status: "success",
+        duration: 2000,
+      });
+    } catch (error) {
+      handleError(error, toast);
+    }
+  };
+
+  const handleAddCard = async (cardData: CardInput) => {
+    if (!activeColumnId) return;
+
+    try {
+      await addCard(activeColumnId, cardData);
+      closeModal("addCard");
+      toast({
+        title: "Card added",
+        status: "success",
+        duration: 2000,
+      });
+    } catch (error) {
+      handleError(error, toast);
     }
   };
 
@@ -230,12 +191,13 @@ export default function BoardPage({ params }: BoardPageProps) {
                 {currentBoard.columns?.map((column, index) => (
                   <Column
                     key={column.id}
-                    data={column}
+                    column={column} // Changed from 'data' to 'column'
                     index={index}
                     onAddCard={() => {
                       setActiveColumnId(column.id);
                       openModal("addCard");
                     }}
+                    boardId={currentBoard.id} // Add this if your Column component requires it
                   />
                 ))}
                 {provided.placeholder}
@@ -244,6 +206,9 @@ export default function BoardPage({ params }: BoardPageProps) {
                   minW="280px"
                   h="40px"
                   onClick={() => openModal("addColumn")}
+                  colorScheme="gray"
+                  variant="ghost"
+                  _hover={{ bg: "gray.100" }}
                 >
                   Add List
                 </Button>
@@ -252,27 +217,36 @@ export default function BoardPage({ params }: BoardPageProps) {
           </Droppable>
         </DragDropContext>
 
-        {/* Modals */}
         <AddColumnModal
           isOpen={modals.addColumn}
           onClose={() => closeModal("addColumn")}
-          onSubmit={async (title) => {
-            await addColumn(title);
-            closeModal("addColumn");
-          }}
+          onSubmit={handleAddColumn}
         />
 
         <AddCardModal
           isOpen={modals.addCard}
           onClose={() => closeModal("addCard")}
-          onSubmit={async (cardData) => {
-            if (activeColumnId) {
-              await addCard(activeColumnId, cardData);
-              closeModal("addCard");
-            }
-          }}
+          onSubmit={handleAddCard}
+        />
+
+        <AddMemberModal
+          isOpen={modals.addMember}
+          onClose={() => closeModal("addMember")}
+          onInvite={handleInviteMember}
         />
       </Container>
     </Box>
   );
+}
+
+export default function BoardPage({ params }: BoardPageProps) {
+  const router = useRouter();
+  const { user } = useAuth();
+
+  if (!user) {
+    router.push("/login");
+    return null;
+  }
+
+  return <BoardContent boardId={params.boardId} />;
 }

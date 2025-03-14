@@ -1,4 +1,4 @@
-// src/components/board/AddColumnModal.tsx
+// src/components/board/AddMemberModal.tsx
 "use client";
 
 import { useState } from "react";
@@ -15,28 +15,40 @@ import {
   FormLabel,
   Input,
   useToast,
+  Text,
 } from "@chakra-ui/react";
 import { handleError } from "@/utils/error-handling";
 
-interface AddColumnModalProps {
+interface AddMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (title: string) => Promise<void>;
+  onInvite: (email: string) => Promise<void>;
 }
 
-export default function AddColumnModal({
+export default function AddMemberModal({
   isOpen,
   onClose,
-  onSubmit,
-}: AddColumnModalProps) {
-  const [title, setTitle] = useState("");
+  onInvite,
+}: AddMemberModalProps) {
+  const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const toast = useToast();
 
   const handleSubmit = async () => {
-    if (!title.trim()) {
+    if (!email.trim()) {
       toast({
-        title: "Title is required",
+        title: "Email is required",
+        status: "error",
+        duration: 2000,
+      });
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast({
+        title: "Invalid email format",
         status: "error",
         duration: 2000,
       });
@@ -45,10 +57,10 @@ export default function AddColumnModal({
 
     setIsSubmitting(true);
     try {
-      await onSubmit(title);
+      await onInvite(email);
 
       // Reset form
-      setTitle("");
+      setEmail("");
       onClose();
     } catch (error) {
       handleError(error, toast);
@@ -61,15 +73,17 @@ export default function AddColumnModal({
     <Modal isOpen={isOpen} onClose={onClose}>
       <ModalOverlay />
       <ModalContent>
-        <ModalHeader>Add List</ModalHeader>
+        <ModalHeader>Invite Member</ModalHeader>
         <ModalCloseButton />
         <ModalBody>
+          <Text mb={4}>Invite a team member to collaborate on this board.</Text>
           <FormControl isRequired>
-            <FormLabel>Title</FormLabel>
+            <FormLabel>Email Address</FormLabel>
             <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Enter list title"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter email address"
+              type="email"
               autoFocus
             />
           </FormControl>
@@ -84,7 +98,7 @@ export default function AddColumnModal({
             onClick={handleSubmit}
             isLoading={isSubmitting}
           >
-            Add List
+            Send Invitation
           </Button>
         </ModalFooter>
       </ModalContent>

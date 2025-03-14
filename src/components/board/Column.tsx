@@ -1,7 +1,7 @@
+// src/components/board/Column.tsx
 "use client";
 
 import { useState, useRef } from "react";
-import { useQuery, useMutation, gql } from "@apollo/client";
 import { Draggable, Droppable } from "react-beautiful-dnd";
 import {
   Box,
@@ -16,127 +16,45 @@ import {
   MenuItem,
   MenuList,
   Text,
-  useDisclosure,
   useToast,
 } from "@chakra-ui/react";
 import { FiPlus, FiMoreHorizontal, FiEdit2, FiTrash2 } from "react-icons/fi";
 import Card from "./Card";
-import AddCardModal from "./AddCardModal";
-
-// Define types for our GraphQL data
-interface CardType {
-  id: string;
-  title: string;
-  description?: string;
-  order: number;
-  labels?: string[];
-  dueDate?: string;
-}
-
-interface CardsData {
-  cards: CardType[];
-}
-
-interface ColumnType {
-  id: string;
-  title: string;
-  boardId: string;
-  order: number;
-}
-
-const GET_CARDS = gql`
-  query GetCards($columnId: ID!) {
-    cards(columnId: $columnId) {
-      id
-      title
-      description
-      order
-      labels
-      dueDate
-    }
-  }
-`;
-
-const UPDATE_COLUMN = gql`
-  mutation UpdateColumn($id: ID!, $title: String!) {
-    updateColumn(id: $id, title: $title) {
-      id
-      title
-    }
-  }
-`;
-
-const DELETE_COLUMN = gql`
-  mutation DeleteColumn($id: ID!) {
-    deleteColumn(id: $id)
-  }
-`;
+import { useBoard } from "@/contexts/board-context";
+import { Column as ColumnType } from "@/types/board";
+import { handleError } from "@/utils/error-handling";
 
 interface ColumnProps {
   column: ColumnType;
   index: number;
   boardId: string;
+  onAddCard: () => void;
 }
 
-export default function Column({ column, index, boardId }: ColumnProps) {
+export default function Column({ column, index, onAddCard }: ColumnProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [columnTitle, setColumnTitle] = useState(column.title);
-  const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
+  const { updateColumn, deleteColumn } = useBoard();
 
-  const { data, loading, error } = useQuery<CardsData>(GET_CARDS, {
-    variables: { columnId: column.id },
-    fetchPolicy: "network-only",
-  });
-
-  const [updateColumn] = useMutation(UPDATE_COLUMN);
-  const [deleteColumn] = useMutation(DELETE_COLUMN, {
-    refetchQueries: [
-      {
-        query: gql`
-          query GetColumns($boardId: ID!) {
-            columns(boardId: $boardId) {
-              id
-              title
-              boardId
-              order
-            }
-          }
-        `,
-        variables: { boardId },
-      },
-    ],
-  });
-
-  const handleTitleUpdate = () => {
+  const handleTitleUpdate = async () => {
     if (columnTitle.trim() === "") return;
 
-    updateColumn({
-      variables: {
-        id: column.id,
-        title: columnTitle,
-      },
-    })
-      .then(() => {
-        setIsEditingTitle(false);
-        toast({
-          title: "Column title updated",
-          status: "success",
-          duration: 2000,
-        });
-      })
-      .catch((error: Error) => {
-        toast({
-          title: "Error updating column title",
-          description: error.message,
-          status: "error",
-          duration: 3000,
-        });
+    try {
+      await updateColumn(column.id, { title: columnTitle });
+      setIsEditingTitle(false);
+      toast({
+        title: "Column title updated",
+        status: "success",
+        duration: 2000,
       });
+    } catch (error) {
+      handleError(error, toast);
+    }
   };
 
-  const handleDeleteColumn = () => {
+  const handleDeleteColumn = async () => {
     if (
       !window.confirm(
         "Are you sure you want to delete this column and all its cards?"
@@ -145,26 +63,16 @@ export default function Column({ column, index, boardId }: ColumnProps) {
       return;
     }
 
-    deleteColumn({
-      variables: {
-        id: column.id,
-      },
-    })
-      .then(() => {
-        toast({
-          title: "Column deleted",
-          status: "success",
-          duration: 2000,
-        });
-      })
-      .catch((error: Error) => {
-        toast({
-          title: "Error deleting column",
-          description: error.message,
-          status: "error",
-          duration: 3000,
-        });
+    try {
+      await deleteColumn(column.id);
+      toast({
+        title: "Column deleted",
+        status: "success",
+        duration: 2000,
       });
+    } catch (error) {
+      handleError(error, toast);
+    }
   };
 
   return (
@@ -249,16 +157,8 @@ export default function Column({ column, index, boardId }: ColumnProps) {
                 p={2}
                 flex="1"
               >
-                {loading ? (
-                  <Text fontSize="sm" color="gray.500">
-                    Loading cards...
-                  </Text>
-                ) : error ? (
-                  <Text fontSize="sm" color="red.500">
-                    Error loading cards
-                  </Text>
-                ) : data && data.cards.length > 0 ? (
-                  data.cards
+                {column.cards.length > 0 ? (
+                  column.cards
                     .slice()
                     .sort((a, b) => a.order - b.order)
                     .map((card, cardIndex) => (
@@ -291,17 +191,11 @@ export default function Column({ column, index, boardId }: ColumnProps) {
               size="sm"
               width="full"
               justifyContent="flex-start"
-              onClick={onOpen}
+              onClick={onAddCard}
             >
               Add a card
             </Button>
           </Box>
-
-          <AddCardModal
-            isOpen={isOpen}
-            onClose={onClose}
-            columnId={column.id}
-          />
         </Box>
       )}
     </Draggable>
