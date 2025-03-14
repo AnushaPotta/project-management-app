@@ -2,26 +2,24 @@
 export interface Board {
   id: string;
   title: string;
-  background?: string;
-  isStarred: boolean;
-  members: Member[];
+  description?: string;
   columns: Column[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Column {
   id: string;
   title: string;
   cards: Card[];
-  boardId: string;
+  order: number;
 }
 
 export interface Card {
   id: string;
   title: string;
   description?: string;
-  labels?: string[];
-  dueDate?: string;
-  members?: string[];
+  order: number;
   columnId: string;
 }
 
@@ -29,4 +27,9 @@ export interface DragItem {
   id: string;
   columnId: string;
   index: number;
+}
+
+export interface CreateBoardInput {
+  title: string;
+  description?: string;
 }

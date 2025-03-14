@@ -7,53 +7,76 @@ import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@apollo/client";
 import { GET_USER_BOARDS, CREATE_BOARD } from "@/graphql/board";
 import { useAuth } from "@/contexts/auth-context";
+import { useBoard } from "@/contexts/board-context";
 import { LoadingState } from "@/components/ui/LoadingState";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import { Board } from "@/types/board";
+import { ApolloError } from "@apollo/client";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { handleError } from "@/utils/error-handling";
 
-export default function DashboardPage() {
+interface CreateBoardInput {
+  title: string;
+  description?: string;
+}
+
+function DashboardContent() {
   const router = useRouter();
   const toast = useToast();
+  const { setCurrentBoard } = useBoard();
   const { user } = useAuth();
 
-  const { data, loading, error } = useQuery(GET_USER_BOARDS);
-  const [createBoard] = useMutation(CREATE_BOARD);
-
-  if (!user) {
-    router.push("/login");
-    return null;
-  }
-
-  if (loading) return <LoadingState />;
-
-  if (error) {
-    toast({
-      title: "Error loading boards",
-      description: error.message,
-      status: "error",
-      duration: 5000,
-    });
-  }
-
-  const handleBoardClick = (boardId: string) => {
-    router.push(`/board/${boardId}`);
-  };
-
-  const handleCreateBoard = async (boardData: any) => {
-    try {
-      const { data } = await createBoard({
-        variables: {
-          input: boardData,
-        },
-        refetchQueries: [{ query: GET_USER_BOARDS }],
+  const { data, loading } = useQuery(GET_USER_BOARDS, {
+    skip: !user,
+    onError: (error: ApolloError) => {
+      toast({
+        title: "Error loading boards",
+        description: error.message,
+        status: "error",
+        duration: 5000,
       });
+    },
+  });
 
-      router.push(`/board/${data.createBoard.id}`);
-    } catch (error) {
+  const [createBoard, { loading: isCreating }] = useMutation(CREATE_BOARD, {
+    onError: (error: ApolloError) => {
       toast({
         title: "Error creating board",
         description: error.message,
         status: "error",
         duration: 5000,
       });
+    },
+  });
+
+  if (loading) return <LoadingState />;
+
+  const handleBoardClick = (board: Board) => {
+    setCurrentBoard(board);
+    router.push(`/board/${board.id}`);
+  };
+
+  const handleCreateBoard = async (boardData: CreateBoardInput) => {
+    try {
+      const { data: createData } = await createBoard({
+        variables: {
+          input: boardData,
+        },
+        refetchQueries: [{ query: GET_USER_BOARDS }],
+      });
+
+      const newBoard = createData.createBoard;
+      setCurrentBoard(newBoard);
+      router.push(`/board/${newBoard.id}`);
+
+      toast({
+        title: "Board created",
+        description: "Successfully created new board",
+        status: "success",
+        duration: 3000,
+      });
+    } catch (error) {
+      handleError(error, toast);
     }
   };
 
@@ -63,7 +86,18 @@ export default function DashboardPage() {
         boards={data?.boards || []}
         onBoardClick={handleBoardClick}
         onCreateBoard={handleCreateBoard}
+        isCreating={isCreating}
       />
     </Container>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <ProtectedRoute>
+      <ErrorBoundary>
+        <DashboardContent />
+      </ErrorBoundary>
+    </ProtectedRoute>
   );
 }

@@ -1,63 +1,121 @@
 // src/components/board/BoardList.tsx
-import { SimpleGrid, Box, Button, Text } from "@chakra-ui/react";
-import { FiPlus } from "react-icons/fi";
-import { BoardCard } from "./BoardCard";
-import CreateBoardModal from "./CreateBoardModal";
-import { useState } from "react";
-
-interface Board {
-  id: string;
-  title: string;
-  background: string;
-  isStarred?: boolean;
-  members: number;
-}
+import {
+  SimpleGrid,
+  Box,
+  Text,
+  Button,
+  useDisclosure,
+  VStack,
+  Heading,
+  Badge,
+} from "@chakra-ui/react";
+import { AddIcon } from "@chakra-ui/icons";
+import { CreateBoardModal } from "./CreateBoardModal";
+import { Board } from "@/types/board";
 
 interface BoardListProps {
   boards: Board[];
-  onBoardClick: (boardId: string) => void;
-  onCreateBoard: (boardData: Omit<Board, "id">) => void;
+  onBoardClick: (board: Board) => void;
+  onCreateBoard: (boardData: {
+    title: string;
+    description?: string;
+  }) => Promise<void>;
+  isCreating: boolean;
 }
 
 export function BoardList({
   boards,
   onBoardClick,
   onCreateBoard,
+  isCreating,
 }: BoardListProps) {
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const { isOpen, onOpen, onClose } = useDisclosure();
 
   return (
-    <Box p={6}>
-      <Text fontSize="xl" fontWeight="bold" mb={4}>
-        Your Boards
-      </Text>
-
-      <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing={4}>
-        {boards.map((board) => (
-          <BoardCard
-            key={board.id}
-            board={board}
-            onClick={() => onBoardClick(board.id)}
-          />
-        ))}
-
+    <VStack spacing={6} align="stretch">
+      <Box display="flex" justifyContent="space-between" alignItems="center">
+        <Heading size="lg">Your Boards</Heading>
         <Button
-          h="150px"
-          onClick={() => setIsCreateModalOpen(true)}
-          display="flex"
-          flexDirection="column"
-          gap={2}
+          onClick={onOpen}
+          colorScheme="brand"
+          size="md"
+          leftIcon={<AddIcon />}
+          isLoading={isCreating}
+          loadingText="Creating..."
         >
-          <FiPlus size={24} />
-          <Text>Create New Board</Text>
+          Create Board
         </Button>
-      </SimpleGrid>
+      </Box>
+
+      {boards.length === 0 ? (
+        <Box
+          p={8}
+          textAlign="center"
+          borderWidth="1px"
+          borderRadius="lg"
+          bg="white"
+        >
+          <Text color="gray.600" mb={4}>
+            You don&apos;t have any boards yet
+          </Text>
+          <Button
+            onClick={onOpen}
+            colorScheme="brand"
+            size="lg"
+            isLoading={isCreating}
+          >
+            Create Your First Board
+          </Button>
+        </Box>
+      ) : (
+        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
+          {boards.map((board) => (
+            <Box
+              key={board.id}
+              p={6}
+              borderWidth="1px"
+              borderRadius="lg"
+              bg="white"
+              cursor="pointer"
+              onClick={() => onBoardClick(board)}
+              _hover={{
+                transform: "translateY(-2px)",
+                shadow: "md",
+                borderColor: "brand.500",
+              }}
+              transition="all 0.2s"
+            >
+              <Text fontSize="xl" fontWeight="bold" mb={2}>
+                {board.title}
+              </Text>
+              {board.description && (
+                <Text color="gray.600" noOfLines={2} mb={3}>
+                  {board.description}
+                </Text>
+              )}
+              <Box>
+                <Badge colorScheme="brand">
+                  {board.columns?.length || 0} columns
+                </Badge>
+                <Badge colorScheme="green" ml={2}>
+                  {board.columns.reduce(
+                    (total, column) => total + column.cards.length,
+                    0
+                  )}{" "}
+                  cards
+                </Badge>
+              </Box>
+            </Box>
+          ))}
+        </SimpleGrid>
+      )}
 
       <CreateBoardModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        isOpen={isOpen}
+        onClose={onClose}
         onCreateBoard={onCreateBoard}
+        isCreating={isCreating}
       />
-    </Box>
+    </VStack>
   );
 }

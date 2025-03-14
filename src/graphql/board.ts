@@ -6,13 +6,19 @@ export const GET_USER_BOARDS = gql`
     boards {
       id
       title
-      background
-      isStarred
-      members {
+      description
+      createdAt
+      updatedAt
+      columns {
         id
-        name
-        email
-        avatar
+        title
+        order
+        cards {
+          id
+          title
+          description
+          order
+        }
       }
     }
   }
@@ -40,11 +46,23 @@ export const CREATE_BOARD = gql`
     createBoard(input: $input) {
       id
       title
-      background
+      description
+      createdAt
+      updatedAt
+      columns {
+        id
+        title
+        order
+        cards {
+          id
+          title
+          description
+          order
+        }
+      }
     }
   }
 `;
-
 export const UPDATE_BOARD = gql`
   mutation UpdateBoard($id: ID!, $input: UpdateBoardInput!) {
     updateBoard(id: $id, input: $input) {

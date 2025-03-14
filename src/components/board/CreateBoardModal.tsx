@@ -1,8 +1,4 @@
 // src/components/board/CreateBoardModal.tsx
-"use client";
-
-import React, { useState } from "react";
-import { gql, useMutation } from "@apollo/client";
 import {
   Modal,
   ModalOverlay,
@@ -15,137 +11,94 @@ import {
   FormControl,
   FormLabel,
   Input,
+  Textarea,
+  VStack,
   FormErrorMessage,
-  useToast,
 } from "@chakra-ui/react";
-
-// GraphQL mutation for creating a board
-const CREATE_BOARD = gql`
-  mutation CreateBoard($title: String!) {
-    createBoard(title: $title) {
-      id
-      title
-    }
-  }
-`;
-
-// Query to refetch after creating a board
-const GET_BOARDS = gql`
-  query GetBoards {
-    boards {
-      id
-      title
-    }
-  }
-`;
+import { useState } from "react";
 
 interface CreateBoardModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateBoard?: (boardName: string) => void; // Made optional
+  onCreateBoard: (boardData: {
+    title: string;
+    description?: string;
+  }) => Promise<void>;
+  isCreating: boolean;
 }
 
-const CreateBoardModal: React.FC<CreateBoardModalProps> = ({
+export function CreateBoardModal({
   isOpen,
   onClose,
   onCreateBoard,
-}) => {
-  const [boardName, setBoardName] = useState("");
-  const [error, setError] = useState("");
-  const toast = useToast();
+  isCreating,
+}: CreateBoardModalProps) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [errors, setErrors] = useState<{ title?: string }>({});
 
-  // Set up the mutation
-  const [createBoard, { loading: isLoading }] = useMutation(CREATE_BOARD, {
-    refetchQueries: [{ query: GET_BOARDS }],
-    onCompleted: (data) => {
-      setBoardName("");
-      setError("");
-      onClose();
-      toast({
-        title: "Board created successfully",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
-      });
-
-      // Call the optional callback if provided
-      if (onCreateBoard) {
-        onCreateBoard(data.createBoard.title);
-      }
-    },
-    onError: (error) => {
-      toast({
-        title: "Error creating board",
-        description: error.message,
-        status: "error",
-        duration: 5000,
-        isClosable: true,
-      });
-    },
-  });
-
-  const handleSubmit = () => {
-    // Validate
-    if (!boardName.trim()) {
-      setError("Board name is required");
+  const handleSubmit = async () => {
+    if (!title.trim()) {
+      setErrors({ title: "Title is required" });
       return;
     }
 
-    if (boardName.length > 50) {
-      setError("Board name cannot exceed 50 characters");
-      return;
-    }
+    await onCreateBoard({
+      title: title.trim(),
+      description: description.trim(),
+    });
 
-    // Execute the mutation
-    createBoard({ variables: { title: boardName.trim() } });
-  };
-
-  const handleClose = () => {
-    setBoardName("");
-    setError("");
+    setTitle("");
+    setDescription("");
+    setErrors({});
     onClose();
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose}>
+    <Modal isOpen={isOpen} onClose={onClose}>
       <ModalOverlay />
       <ModalContent>
         <ModalHeader>Create New Board</ModalHeader>
         <ModalCloseButton />
-        <ModalBody pb={6}>
-          <FormControl isInvalid={!!error}>
-            <FormLabel>Board Name</FormLabel>
-            <Input
-              placeholder="Enter board name"
-              value={boardName}
-              onChange={(e) => {
-                setBoardName(e.target.value);
-                setError("");
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleSubmit();
-                }
-              }}
-            />
-            {error && <FormErrorMessage>{error}</FormErrorMessage>}
-          </FormControl>
+        <ModalBody>
+          <VStack spacing={4}>
+            <FormControl isInvalid={!!errors.title}>
+              <FormLabel>Board Title</FormLabel>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Enter board title"
+              />
+              {errors.title && (
+                <FormErrorMessage>{errors.title}</FormErrorMessage>
+              )}
+            </FormControl>
+
+            <FormControl>
+              <FormLabel>Description (Optional)</FormLabel>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Enter board description"
+              />
+            </FormControl>
+          </VStack>
         </ModalBody>
 
         <ModalFooter>
-          <Button
-            colorScheme="blue"
-            mr={3}
-            isLoading={isLoading}
-            onClick={handleSubmit}
-          >
-            Create
+          <Button variant="ghost" mr={3} onClick={onClose}>
+            Cancel
           </Button>
-          <Button onClick={handleClose}>Cancel</Button>
+          <Button
+            colorScheme="brand"
+            onClick={handleSubmit}
+            isLoading={isCreating}
+            loadingText="Creating..."
+          >
+            Create Board
+          </Button>
         </ModalFooter>
       </ModalContent>
     </Modal>
   );
-};
-
-export default CreateBoardModal;
+}
