@@ -21,6 +21,7 @@ interface BoardListProps {
     description?: string;
   }) => Promise<void>;
   isCreating: boolean;
+  error?: string;
 }
 
 export function BoardList({
@@ -28,8 +29,33 @@ export function BoardList({
   onBoardClick,
   onCreateBoard,
   isCreating,
+  error,
 }: BoardListProps) {
   const { isOpen, onOpen, onClose } = useDisclosure();
+
+  if (error) {
+    return (
+      <Box
+        p={6}
+        borderWidth="1px"
+        borderRadius="lg"
+        bg="red.50"
+        borderColor="red.200"
+      >
+        <Heading size="md" mb={2} color="red.500">
+          Error Loading Boards
+        </Heading>
+        <Text>{error}</Text>
+        <Button
+          mt={4}
+          colorScheme="blue"
+          onClick={() => onCreateBoard({ title: "My First Board" })}
+        >
+          Create New Board Instead
+        </Button>
+      </Box>
+    );
+  }
 
   return (
     <VStack spacing={6} align="stretch">

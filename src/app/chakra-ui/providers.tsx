@@ -1,36 +1,44 @@
+// src/app/providers.tsx
 "use client";
 
-import { ChakraProvider, extendTheme } from "@chakra-ui/react";
-import { ReactNode } from "react";
+import { useState, useEffect } from "react";
+import { ApolloProvider } from "@apollo/client";
+import { AuthProvider } from "@/contexts/auth-context";
+import { BoardProvider } from "@/contexts/board-context";
+import { UIProvider } from "@/contexts/ui-context";
+import { client } from "@/lib/apollo-client";
+import { ChakraProvider } from "@chakra-ui/react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
-export const theme = extendTheme({
-  colors: {
-    brand: {
-      50: "#e3f2fd",
-      100: "#bbdefb",
-      200: "#90caf9",
-      300: "#64b5f6",
-      400: "#42a5f5",
-      500: "#2196f3",
-      600: "#1e88e5",
-      700: "#1976d2",
-      800: "#1565c0",
-      900: "#0d47a1",
-    },
-  },
-  fonts: {
-    heading: "Inter, system-ui, sans-serif",
-    body: "Inter, system-ui, sans-serif",
-  },
-  components: {
-    Button: {
-      defaultProps: {
-        colorScheme: "brand",
-      },
-    },
-  },
-});
+export function Providers({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
 
-export function Providers({ children }: { children: ReactNode }) {
-  return <ChakraProvider theme={theme}>{children}</ChakraProvider>;
+  // Prevent hydration errors by only rendering client components after mount
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // During SSR or before hydration, render a minimal version
+  if (!mounted) {
+    return (
+      <ChakraProvider>
+        <div style={{ visibility: "hidden" }}>{children}</div>
+      </ChakraProvider>
+    );
+  }
+
+  // After client-side hydration, render the full app
+  return (
+    <ErrorBoundary>
+      <ChakraProvider>
+        <ApolloProvider client={client}>
+          <AuthProvider>
+            <BoardProvider>
+              <UIProvider>{children}</UIProvider>
+            </BoardProvider>
+          </AuthProvider>
+        </ApolloProvider>
+      </ChakraProvider>
+    </ErrorBoundary>
+  );
 }

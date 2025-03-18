@@ -1,32 +1,48 @@
-// lib/apollo-client.ts
-"use client";
+// src/lib/apollo-client.ts
+import {
+  ApolloClient,
+  InMemoryCache,
+  HttpLink,
+  NormalizedCacheObject,
+} from "@apollo/client";
 
-import { ApolloClient, InMemoryCache, createHttpLink } from "@apollo/client";
-import { setContext } from "@apollo/client/link/context";
-import { auth } from "./firebase";
+// Specify the type for apolloClient
+let apolloClient: ApolloClient<NormalizedCacheObject> | undefined;
 
-// Create an HTTP link to your GraphQL API
-const httpLink = createHttpLink({
-  uri:
-    process.env.NEXT_PUBLIC_GRAPHQL_ENDPOINT || "http://localhost:4000/graphql",
-});
+export function createApolloClient() {
+  return new ApolloClient({
+    ssrMode: typeof window === "undefined", // True if on server
+    link: new HttpLink({
+      uri: process.env.NEXT_PUBLIC_GRAPHQL_ENDPOINT || "/api/graphql",
+    }),
+    cache: new InMemoryCache(),
+  });
+}
 
-// Add authentication to your GraphQL requests
-const authLink = setContext(async (_, { headers }) => {
-  // Get the authentication token if it exists
-  const token = await auth.currentUser?.getIdToken();
+export function initializeApollo(initialState = null) {
+  const _apolloClient = apolloClient ?? createApolloClient();
 
-  // Return the headers to the context so httpLink can read them
-  return {
-    headers: {
-      ...headers,
-      authorization: token ? `Bearer ${token}` : "",
-    },
-  };
-});
+  // If your page has Next.js data fetching methods that use Apollo Client,
+  // the initial state gets hydrated here
+  if (initialState) {
+    // Get existing cache, loaded during client side data fetching
+    const existingCache = _apolloClient.extract();
 
-// Create the Apollo Client
-export const client = new ApolloClient({
-  link: authLink.concat(httpLink),
-  cache: new InMemoryCache(),
-});
+    // Restore the cache using the data passed from
+    // getStaticProps/getServerSideProps combined with the existing cached data
+    _apolloClient.cache.restore({
+      ...existingCache,
+      ...(initialState as NormalizedCacheObject),
+    });
+  }
+
+  // For SSG and SSR always create a new Apollo Client
+  if (typeof window === "undefined") return _apolloClient;
+
+  // Create the Apollo Client once in the client
+  if (!apolloClient) apolloClient = _apolloClient;
+  return _apolloClient;
+}
+
+// Export a singleton instance for client-side usage
+export const client = initializeApollo();

@@ -1,7 +1,7 @@
-// app/login/page.tsx
+// src/app/login/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Box,
   Button,
@@ -22,8 +22,26 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { FirebaseError } from "firebase/app";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 export default function Login() {
+  const [isClient, setIsClient] = useState(false);
+
+  // Use this to safely access useAuth only on the client side
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Only render the login content on the client side
+  if (!isClient) {
+    return <LoadingState />;
+  }
+
+  return <LoginContent />;
+}
+
+// Separate the content to ensure useAuth is only called after AuthProvider is mounted
+function LoginContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -189,7 +207,7 @@ export default function Login() {
             </Button>
             <Button
               type="submit"
-              colorScheme="brand"
+              colorScheme="blue"
               size="lg"
               width="full"
               mt={4}

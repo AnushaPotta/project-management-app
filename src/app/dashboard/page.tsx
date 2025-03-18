@@ -1,6 +1,7 @@
 // src/app/dashboard/page.tsx
 "use client";
 
+import { useState, useEffect } from "react";
 import { Container, useToast } from "@chakra-ui/react";
 import { BoardList } from "@/components/board/BoardList";
 import { useRouter } from "next/navigation";
@@ -25,9 +26,15 @@ function DashboardContent() {
   const toast = useToast();
   const { setCurrentBoard } = useBoard();
   const { user } = useAuth();
+  const [isClient, setIsClient] = useState(false);
 
-  const { data, loading } = useQuery(GET_USER_BOARDS, {
-    skip: !user,
+  // Ensure we're on the client side before making GraphQL requests
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  const { data, loading, error } = useQuery(GET_USER_BOARDS, {
+    skip: !user || !isClient,
     onError: (error: ApolloError) => {
       toast({
         title: "Error loading boards",
@@ -49,7 +56,22 @@ function DashboardContent() {
     },
   });
 
-  if (loading) return <LoadingState />;
+  if (!isClient || loading) return <LoadingState />;
+
+  // Handle error state explicitly
+  if (error && !data) {
+    return (
+      <Container maxW="container.xl" py={6}>
+        <BoardList
+          boards={[]}
+          onBoardClick={() => {}}
+          onCreateBoard={handleCreateBoard}
+          isCreating={isCreating}
+          error={error.message}
+        />
+      </Container>
+    );
+  }
 
   const handleBoardClick = (board: Board) => {
     setCurrentBoard(board);

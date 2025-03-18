@@ -17,7 +17,9 @@ import Image from "next/image";
 import { FiCheckCircle, FiUsers, FiClock, FiTrello } from "react-icons/fi";
 import { IconType } from "react-icons";
 import { useAuth } from "@/contexts/auth-context";
+import AuthenticatedLayout from "@/components/AuthenticatedLayout";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 // Feature component with proper typing
 interface FeatureProps {
@@ -41,12 +43,63 @@ const Feature = ({ icon, title, description }: FeatureProps) => {
       <Text fontWeight="bold" fontSize="lg">
         {title}
       </Text>
-      <Text color="gray.600">{description}</Text>
+      <Text color={useColorModeValue("gray.600", "gray.300")}>
+        {description}
+      </Text>
     </VStack>
   );
 };
 
+// Features data
+const features: FeatureProps[] = [
+  {
+    icon: FiCheckCircle,
+    title: "Easy Task Management",
+    description:
+      "Create, organize, and track tasks with intuitive drag-and-drop interfaces",
+  },
+  {
+    icon: FiUsers,
+    title: "Team Collaboration",
+    description:
+      "Work together seamlessly with real-time updates and notifications",
+  },
+  {
+    icon: FiClock,
+    title: "Time Tracking",
+    description: "Monitor project progress and team productivity effectively",
+  },
+  {
+    icon: FiTrello,
+    title: "Customizable Boards",
+    description:
+      "Adapt boards to your workflow with flexible customization options",
+  },
+];
+
 export default function Home() {
+  // const router = useRouter();
+  const [isClient, setIsClient] = useState(false);
+
+  // Use this to safely access useAuth only on the client side
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Only render the authenticated content on the client side
+  if (!isClient) {
+    return null;
+  }
+
+  return (
+    <AuthenticatedLayout>
+      <HomeContent />
+    </AuthenticatedLayout>
+  );
+}
+
+// Separate the content to ensure useAuth is only called after AuthProvider is mounted
+function HomeContent() {
   const { user } = useAuth();
   const router = useRouter();
 
@@ -57,33 +110,6 @@ export default function Home() {
       router.push("/register");
     }
   };
-
-  // Define features data
-  const features: FeatureProps[] = [
-    {
-      icon: FiCheckCircle,
-      title: "Easy Task Management",
-      description:
-        "Create, organize, and track tasks with intuitive drag-and-drop interfaces",
-    },
-    {
-      icon: FiUsers,
-      title: "Team Collaboration",
-      description:
-        "Work together seamlessly with real-time updates and notifications",
-    },
-    {
-      icon: FiClock,
-      title: "Time Tracking",
-      description: "Monitor project progress and team productivity effectively",
-    },
-    {
-      icon: FiTrello,
-      title: "Customizable Boards",
-      description:
-        "Adapt boards to your workflow with flexible customization options",
-    },
-  ];
 
   return (
     <Box>
@@ -99,7 +125,10 @@ export default function Home() {
             >
               Manage your projects with ease
             </Heading>
-            <Text fontSize="xl" color="gray.600">
+            <Text
+              fontSize="xl"
+              color={useColorModeValue("gray.600", "gray.300")}
+            >
               TaskFlow helps teams move work forward by organizing projects,
               tracking progress, and collaborating effectively.
             </Text>
@@ -139,7 +168,11 @@ export default function Home() {
           <VStack spacing={12}>
             <VStack spacing={4} textAlign="center">
               <Heading size="xl">Why Choose TaskFlow?</Heading>
-              <Text color="gray.600" fontSize="lg" maxW="container.md">
+              <Text
+                color={useColorModeValue("gray.600", "gray.300")}
+                fontSize="lg"
+                maxW="container.md"
+              >
                 Streamline your workflow with powerful features designed to
                 enhance productivity
               </Text>

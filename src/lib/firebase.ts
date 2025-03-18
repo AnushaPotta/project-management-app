@@ -30,6 +30,19 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
+console.log(
+  "Firebase API Key:",
+  process.env.NEXT_PUBLIC_FIREBASE_API_KEY
+    ? "Exists (first 5 chars): " +
+        process.env.NEXT_PUBLIC_FIREBASE_API_KEY.substring(0, 5) +
+        "..."
+    : "Not found"
+);
+console.log(
+  "Firebase Auth Domain:",
+  process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ? "Exists" : "Not found"
+);
+
 // Initialize Firebase
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -74,9 +87,9 @@ const registerWithEmailAndPassword = async (
     await sendEmailVerification(user);
 
     return user;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error registering with email and password:", error);
-    throw error;
+    throw error; // Re-throw to handle in the component
   }
 };
 
