@@ -1,9 +1,15 @@
-// src/app/dashboard/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
-import { Container, useToast } from "@chakra-ui/react";
-import { BoardList } from "@/components/board/BoardList";
+import {
+  Container,
+  useToast,
+  Box,
+  SimpleGrid,
+  Heading,
+  Text,
+  Button,
+} from "@chakra-ui/react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@apollo/client";
 import { GET_USER_BOARDS, CREATE_BOARD } from "@/graphql/board";
@@ -15,6 +21,11 @@ import { Board } from "@/types/board";
 import { ApolloError } from "@apollo/client";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { handleError } from "@/utils/error-handling";
+import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import TaskSummary from "@/components/dashboard/TaskSummary";
+import RecentActivity from "@/components/dashboard/RecentActivity";
+import UpcomingDeadlines from "@/components/dashboard/UpcomingDeadlines";
+import { BoardList } from "@/components/board/BoardList";
 
 interface CreateBoardInput {
   title: string;
@@ -32,6 +43,36 @@ function DashboardContent() {
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // Define handleCreateBoard function before it's used
+  const handleCreateBoard = async (boardData: CreateBoardInput) => {
+    try {
+      const { data: createData } = await createBoard({
+        variables: {
+          input: boardData,
+        },
+        refetchQueries: [{ query: GET_USER_BOARDS }],
+      });
+
+      const newBoard = createData.createBoard;
+      setCurrentBoard(newBoard);
+      router.push(`/board/${newBoard.id}`);
+
+      toast({
+        title: "Board created",
+        description: "Successfully created new board",
+        status: "success",
+        duration: 3000,
+      });
+    } catch (error) {
+      handleError(error, toast);
+    }
+  };
+
+  const handleBoardClick = (board: Board) => {
+    setCurrentBoard(board);
+    router.push(`/board/${board.id}`);
+  };
 
   const { data, loading, error } = useQuery(GET_USER_BOARDS, {
     skip: !user || !isClient,
@@ -58,59 +99,64 @@ function DashboardContent() {
 
   if (!isClient || loading) return <LoadingState />;
 
-  // Handle error state explicitly
+  // Handle error state explicitly without passing error to BoardList
   if (error && !data) {
     return (
       <Container maxW="container.xl" py={6}>
-        <BoardList
-          boards={[]}
-          onBoardClick={() => {}}
-          onCreateBoard={handleCreateBoard}
-          isCreating={isCreating}
-          error={error.message}
-        />
+        <Box
+          p={6}
+          borderWidth="1px"
+          borderRadius="lg"
+          bg="red.50"
+          borderColor="red.200"
+        >
+          <Heading size="md" mb={2} color="red.500">
+            Error Loading Boards
+          </Heading>
+          <Text>{error.message}</Text>
+          <Button
+            mt={4}
+            colorScheme="blue"
+            onClick={() => handleCreateBoard({ title: "My First Board" })}
+            isLoading={isCreating}
+          >
+            Create New Board
+          </Button>
+        </Box>
       </Container>
     );
   }
 
-  const handleBoardClick = (board: Board) => {
-    setCurrentBoard(board);
-    router.push(`/board/${board.id}`);
-  };
-
-  const handleCreateBoard = async (boardData: CreateBoardInput) => {
-    try {
-      const { data: createData } = await createBoard({
-        variables: {
-          input: boardData,
-        },
-        refetchQueries: [{ query: GET_USER_BOARDS }],
-      });
-
-      const newBoard = createData.createBoard;
-      setCurrentBoard(newBoard);
-      router.push(`/board/${newBoard.id}`);
-
-      toast({
-        title: "Board created",
-        description: "Successfully created new board",
-        status: "success",
-        duration: 3000,
-      });
-    } catch (error) {
-      handleError(error, toast);
-    }
-  };
-
   return (
-    <Container maxW="container.xl" py={6}>
-      <BoardList
-        boards={data?.boards || []}
-        onBoardClick={handleBoardClick}
-        onCreateBoard={handleCreateBoard}
-        isCreating={isCreating}
-      />
-    </Container>
+    <Box>
+      <Heading size="lg" mb={6}>
+        Dashboard
+      </Heading>
+
+      {/* Task summary widget */}
+      <TaskSummary />
+
+      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6} mt={6}>
+        {/* Recent activity feed */}
+        <RecentActivity />
+
+        {/* Upcoming deadlines */}
+        <UpcomingDeadlines />
+      </SimpleGrid>
+
+      {/* Board list */}
+      <Box mt={8}>
+        <Heading size="md" mb={4}>
+          Your Boards
+        </Heading>
+        <BoardList
+          boards={data?.boards || []}
+          onBoardClick={handleBoardClick}
+          onCreateBoard={handleCreateBoard}
+          isCreating={isCreating}
+        />
+      </Box>
+    </Box>
   );
 }
 
@@ -118,7 +164,9 @@ export default function DashboardPage() {
   return (
     <ProtectedRoute>
       <ErrorBoundary>
-        <DashboardContent />
+        <DashboardLayout>
+          <DashboardContent />
+        </DashboardLayout>
       </ErrorBoundary>
     </ProtectedRoute>
   );
