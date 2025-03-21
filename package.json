@@ -20,6 +20,7 @@
     "@chakra-ui/theme-utils": "^2.0.21",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
+    "@hello-pangea/dnd": "^18.0.1",
     "firebase": "^11.4.0",
     "framer-motion": "^12.4.10",
     "graphql": "^16.10.0",
