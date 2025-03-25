@@ -60,41 +60,30 @@ export default function Navbar() {
           >
             TaskFlow
           </Text>
-
-          {user && (
-            <>
-              <IconButton
-                aria-label="Home"
-                icon={<FiHome />}
-                variant="ghost"
-                onClick={() => router.push("/dashboard")}
-              />
-
-              <Button
-                leftIcon={<FiPlus />}
-                colorScheme="blue"
-                variant="ghost"
-                onClick={() => router.push("/dashboard")}
-              >
-                Create
-              </Button>
-            </>
-          )}
         </Flex>
 
         {/* Center section - Only show if user is logged in */}
         {user && (
-          <Flex maxW="400px" flex={1} mx={8}>
-            <Input
-              placeholder="Search boards..."
-              onClick={() => router.push("/search")}
-              size="sm"
-              borderRadius="md"
-              _focus={{
-                borderColor: "blue.500",
-                boxShadow: "0 0 0 1px var(--chakra-colors-blue-500)",
-              }}
+          <Flex justify="center" flex={1}>
+            <IconButton
+              aria-label="Home"
+              icon={<FiHome />}
+              variant="ghost"
+              onClick={() => router.push("/dashboard")}
             />
+
+            <Button variant="ghost" onClick={() => router.push("/boards")}>
+              Boards
+            </Button>
+
+            <Button
+              leftIcon={<FiPlus />}
+              colorScheme="blue"
+              variant="ghost"
+              onClick={() => router.push("/dashboard")}
+            >
+              Create
+            </Button>
           </Flex>
         )}
 

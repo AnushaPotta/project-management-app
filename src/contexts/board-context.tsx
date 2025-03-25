@@ -1,4 +1,6 @@
 // src/contexts/board-context.tsx
+
+"use client";
 import { createContext, useContext, useState, useCallback } from "react";
 import { useMutation } from "@apollo/client";
 import {

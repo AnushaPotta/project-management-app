@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@apollo/client";
 import { GET_USER_BOARDS, CREATE_BOARD } from "@/graphql/board";
 import { useAuth } from "@/contexts/auth-context";
-import { useBoard } from "@/contexts/board-context";
+import { useBoard, BoardProvider } from "@/contexts/board-context";
 import { LoadingState } from "@/components/ui/LoadingState";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Board } from "@/types/board";
@@ -26,6 +26,8 @@ import TaskSummary from "@/components/dashboard/TaskSummary";
 import RecentActivity from "@/components/dashboard/RecentActivity";
 import UpcomingDeadlines from "@/components/dashboard/UpcomingDeadlines";
 import { BoardList } from "@/components/board/BoardList";
+import { ApolloProvider } from "@apollo/client";
+import { apolloClient } from "@/lib/apollo-client";
 
 interface CreateBoardInput {
   title: string;
@@ -164,9 +166,11 @@ export default function DashboardPage() {
   return (
     <ProtectedRoute>
       <ErrorBoundary>
-        <DashboardLayout>
-          <DashboardContent />
-        </DashboardLayout>
+        <BoardProvider>
+          <DashboardLayout>
+            <DashboardContent />
+          </DashboardLayout>
+        </BoardProvider>
       </ErrorBoundary>
     </ProtectedRoute>
   );

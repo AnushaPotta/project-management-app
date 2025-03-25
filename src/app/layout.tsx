@@ -1,10 +1,5 @@
-// src/app/layout.tsx
-import { Providers } from "@/app/chakra-ui/providers";
-
-export const metadata = {
-  title: "Project Management App",
-  description: "A Trello-like project management application",
-};
+import Providers from "@/components/Providers";
+import ApolloClientProvider from "@/components/Providers";
 
 export default function RootLayout({
   children,
@@ -14,7 +9,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Providers>{children}</Providers>
+        <ApolloClientProvider>
+          <Providers>{children}</Providers>
+        </ApolloClientProvider>
       </body>
     </html>
   );
