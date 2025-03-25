@@ -90,7 +90,7 @@ export function CreateBoardModal({
             Cancel
           </Button>
           <Button
-            colorScheme="brand"
+            colorScheme="blue"
             onClick={handleSubmit}
             isLoading={isCreating}
             loadingText="Creating..."
