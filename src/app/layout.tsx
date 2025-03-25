@@ -1,5 +1,5 @@
-import Providers from "@/components/Providers";
-import ApolloClientProvider from "@/components/Providers";
+// src/app/layout.tsx
+import { Providers } from "@/app/chakra-ui/providers";
 
 export default function RootLayout({
   children,
@@ -9,9 +9,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <ApolloClientProvider>
-          <Providers>{children}</Providers>
-        </ApolloClientProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

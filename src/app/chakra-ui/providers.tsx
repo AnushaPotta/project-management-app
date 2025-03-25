@@ -1,4 +1,3 @@
-// src/app/providers.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -6,6 +5,7 @@ import { ApolloProvider } from "@apollo/client";
 import { AuthProvider } from "@/contexts/auth-context";
 import { BoardProvider } from "@/contexts/board-context";
 import { UIProvider } from "@/contexts/ui-context";
+// Import the client from the same location as in your other Providers file
 import { client } from "@/lib/apollo-client";
 import { ChakraProvider } from "@chakra-ui/react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";

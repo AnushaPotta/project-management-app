@@ -124,10 +124,11 @@ export function BoardList({
                   {board.columns?.length || 0} columns
                 </Badge>
                 <Badge colorScheme="green" ml={2}>
-                  {board.columns.reduce(
-                    (total, column) => total + column.cards.length,
-                    0
-                  )}{" "}
+                  {board.columns &&
+                    board.columns.reduce(
+                      (total, column) => total + column.cards.length,
+                      0
+                    )}{" "}
                   cards
                 </Badge>
               </Box>
