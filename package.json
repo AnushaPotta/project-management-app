@@ -28,7 +28,6 @@
     "graphql-tag": "^2.12.6",
     "next": "15.2.1",
     "react": "^18.2.0",
-    "react-beautiful-dnd": "^13.1.1",
     "react-dom": "^18.2.0",
     "react-icons": "^5.5.0"
   },
@@ -36,7 +35,6 @@
     "@eslint/eslintrc": "^3",
     "@types/node": "^20",
     "@types/react": "^19",
-    "@types/react-beautiful-dnd": "^13.1.8",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.2.1",

@@ -48,6 +48,7 @@ export interface BoardUpdate {
   description?: string;
   background?: string;
   isStarred?: boolean;
+  columns?: Column[]; // Added to support column updates
 }
 
 export interface CardInput {
@@ -56,4 +57,26 @@ export interface CardInput {
   dueDate?: string;
   assignedTo?: string[];
   labels?: string[];
+}
+
+// New interface for column creation/updates
+export interface ColumnInput {
+  title: string;
+}
+
+// New interface for column position updates during drag operations
+export interface ColumnOrderUpdate {
+  columns: Array<{
+    id: string;
+    order: number;
+  }>;
+}
+
+// New interface for card position updates during drag operations
+export interface CardOrderUpdate {
+  cards: Array<{
+    id: string;
+    columnId: string;
+    order: number;
+  }>;
 }

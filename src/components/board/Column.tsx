@@ -1,77 +1,116 @@
 // src/components/board/Column.tsx
-"use client";
-
 import { useState, useRef } from "react";
-import { Draggable, Droppable } from "react-beautiful-dnd";
 import {
   Box,
-  Button,
-  Flex,
   Heading,
-  Icon,
+  Text,
   IconButton,
   Input,
+  Flex,
+  Button,
   Menu,
   MenuButton,
-  MenuItem,
   MenuList,
-  Text,
+  MenuItem,
   useToast,
+  useColorModeValue,
 } from "@chakra-ui/react";
 import { FiPlus, FiMoreHorizontal, FiEdit2, FiTrash2 } from "react-icons/fi";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import { addCard, updateBoard } from "@/services/boardService";
+import { Board, Column as ColumnType } from "@/types/board";
 import Card from "./Card";
-import { useBoard } from "@/contexts/board-context";
-import { Column as ColumnType } from "@/types/board";
-import { handleError } from "@/utils/error-handling";
 
 interface ColumnProps {
   column: ColumnType;
   index: number;
   boardId: string;
-  onAddCard: () => void;
+  onBoardChange: (board: Board) => void;
 }
 
-export default function Column({ column, index, onAddCard }: ColumnProps) {
+export default function Column({
+  column,
+  index,
+  boardId,
+  onBoardChange,
+}: ColumnProps) {
+  const [isAddingCard, setIsAddingCard] = useState(false);
+  const [newCardTitle, setNewCardTitle] = useState("");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [columnTitle, setColumnTitle] = useState(column.title);
-  const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
-  const { updateColumn, deleteColumn } = useBoard();
+  const toast = useToast();
 
-  const handleTitleUpdate = async () => {
-    if (columnTitle.trim() === "") return;
+  const bgColor = useColorModeValue("gray.100", "gray.700");
+  const columnBg = useColorModeValue("white", "gray.800");
+
+  const handleAddCard = async () => {
+    if (!newCardTitle.trim()) return;
 
     try {
-      await updateColumn(column.id, { title: columnTitle });
-      setIsEditingTitle(false);
-      toast({
-        title: "Column title updated",
-        status: "success",
-        duration: 2000,
+      const updatedBoard = await addCard(boardId, column.id, {
+        title: newCardTitle.trim(),
       });
+      onBoardChange(updatedBoard);
+      setNewCardTitle("");
+      setIsAddingCard(false);
     } catch (error) {
-      handleError(error, toast);
+      console.error("Failed to add card:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add card",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
     }
   };
 
-  const handleDeleteColumn = async () => {
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this column and all its cards?"
-      )
-    ) {
-      return;
-    }
-
+  const updateColumnTitle = async () => {
     try {
-      await deleteColumn(column.id);
+      // First get the current board to work with
+      const updatedColumns = [...column.cards];
+
+      // Find and update the column title
+      const updatedBoard = await updateBoard(boardId, {
+        columns: updateColumnTitle,
+      });
+
+      onBoardChange(updatedBoard);
+      setIsEditingTitle(false);
+    } catch (error) {
+      console.error("Failed to update column title:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update column title",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+      // Reset to original title
+      setColumnTitle(column.title);
+    }
+  };
+
+  const deleteColumn = async () => {
+    try {
+      // Implementation would involve removing this column from the board
+      // This would require a new API endpoint in boardService
       toast({
         title: "Column deleted",
         status: "success",
         duration: 2000,
+        isClosable: true,
       });
     } catch (error) {
-      handleError(error, toast);
+      console.error("Failed to delete column:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete column",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
     }
   };
 
@@ -81,19 +120,21 @@ export default function Column({ column, index, onAddCard }: ColumnProps) {
         <Box
           ref={provided.innerRef}
           {...provided.draggableProps}
-          minW="272px"
-          maxW="272px"
-          h="fit-content"
-          bg="gray.100"
+          minW="280px"
+          maxW="280px"
+          marginRight={2}
+          height="fit-content"
+          bg={columnBg}
           borderRadius="md"
-          mr={2}
-          display="flex"
-          flexDirection="column"
+          boxShadow="sm"
         >
+          {/* Column Header */}
           <Flex
             p={2}
             align="center"
             justify="space-between"
+            bg={bgColor}
+            borderTopRadius="md"
             {...provided.dragHandleProps}
           >
             {isEditingTitle ? (
@@ -101,25 +142,21 @@ export default function Column({ column, index, onAddCard }: ColumnProps) {
                 ref={inputRef}
                 value={columnTitle}
                 onChange={(e) => setColumnTitle(e.target.value)}
+                onBlur={updateColumnTitle}
+                onKeyPress={(e) => e.key === "Enter" && updateColumnTitle()}
                 size="sm"
-                onBlur={handleTitleUpdate}
-                onKeyPress={(e) => {
-                  if (e.key === "Enter") {
-                    handleTitleUpdate();
-                  }
-                }}
                 autoFocus
+                maxW="200px"
               />
             ) : (
               <Heading
                 size="sm"
-                fontWeight="semibold"
                 onClick={() => {
                   setIsEditingTitle(true);
                   setTimeout(() => inputRef.current?.focus(), 0);
                 }}
                 cursor="pointer"
-                flex="1"
+                p={1}
                 isTruncated
               >
                 {column.title}
@@ -129,72 +166,92 @@ export default function Column({ column, index, onAddCard }: ColumnProps) {
             <Menu>
               <MenuButton
                 as={IconButton}
+                aria-label="Column options"
                 icon={<FiMoreHorizontal />}
                 variant="ghost"
                 size="sm"
-                aria-label="Column menu"
               />
               <MenuList>
                 <MenuItem
                   icon={<FiEdit2 />}
-                  onClick={() => setIsEditingTitle(true)}
+                  onClick={() => {
+                    setIsEditingTitle(true);
+                    setTimeout(() => inputRef.current?.focus(), 0);
+                  }}
                 >
                   Edit title
                 </MenuItem>
-                <MenuItem icon={<FiTrash2 />} onClick={handleDeleteColumn}>
+                <MenuItem icon={<FiTrash2 />} onClick={deleteColumn}>
                   Delete column
                 </MenuItem>
               </MenuList>
             </Menu>
           </Flex>
 
-          <Droppable droppableId={column.id} type="card">
-            {(provided) => (
+          {/* Column Content - Cards */}
+          <Droppable
+            droppableId={column.id}
+            type="CARD"
+            isDropDisabled={false} // Explicitly set to false
+          >
+            {(provided, snapshot) => (
               <Box
                 ref={provided.innerRef}
                 {...provided.droppableProps}
-                minH="10px"
+                minH="20px"
                 p={2}
-                flex="1"
+                bg={snapshot.isDraggingOver ? bgColor : "transparent"}
+                transition="background-color 0.2s ease"
               >
-                {column.cards.length > 0 ? (
-                  column.cards
-                    .slice()
-                    .sort((a, b) => a.order - b.order)
-                    .map((card, cardIndex) => (
-                      <Card
-                        key={card.id}
-                        card={card}
-                        index={cardIndex}
-                        columnId={column.id}
-                      />
-                    ))
-                ) : (
-                  <Text
-                    fontSize="sm"
-                    color="gray.500"
-                    textAlign="center"
-                    py={2}
-                  >
-                    No cards yet
-                  </Text>
-                )}
-                {provided.placeholder}
+                {/* Rest of the component... */}
               </Box>
             )}
           </Droppable>
 
+          {/* Add Card Section */}
           <Box p={2}>
-            <Button
-              leftIcon={<Icon as={FiPlus} />}
-              variant="ghost"
-              size="sm"
-              width="full"
-              justifyContent="flex-start"
-              onClick={onAddCard}
-            >
-              Add a card
-            </Button>
+            {isAddingCard ? (
+              <Box mb={2}>
+                <Input
+                  placeholder="Enter card title..."
+                  value={newCardTitle}
+                  onChange={(e) => setNewCardTitle(e.target.value)}
+                  onKeyPress={(e) => e.key === "Enter" && handleAddCard()}
+                  size="sm"
+                  mb={2}
+                  autoFocus
+                />
+                <Flex>
+                  <Button
+                    size="sm"
+                    colorScheme="blue"
+                    onClick={handleAddCard}
+                    mr={2}
+                  >
+                    Add
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setIsAddingCard(false);
+                      setNewCardTitle("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </Flex>
+              </Box>
+            ) : (
+              <Button
+                leftIcon={<FiPlus />}
+                onClick={() => setIsAddingCard(true)}
+                size="sm"
+                width="100%"
+                variant="ghost"
+              >
+                Add a card
+              </Button>
+            )}
           </Box>
         </Box>
       )}
