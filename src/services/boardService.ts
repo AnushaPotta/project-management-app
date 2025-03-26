@@ -257,3 +257,26 @@ export async function addCard(
 
   return board;
 }
+
+export async function deleteColumn(
+  boardId: string,
+  columnId: string
+): Promise<Board> {
+  try {
+    const response = await fetch(`/api/boards/${boardId}/columns/${columnId}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to delete column");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error deleting column:", error);
+    throw error;
+  }
+}

@@ -94,23 +94,35 @@ export default function Column({
 
   const deleteColumn = async () => {
     try {
-      // Implementation would involve removing this column from the board
-      // This would require a new API endpoint in boardService
+      const confirmed = window.confirm(
+        `Are you sure you want to delete the "${column.title}" list and all its cards?`
+      );
+
+      if (!confirmed) return;
+
+      // Show loading state
       toast({
-        title: "Column deleted",
+        title: "Deleting list...",
+        status: "loading",
+        duration: null,
+        isClosable: false,
+        id: "delete-column-toast",
+      });
+
+      const updatedBoard = await deleteColumn(boardId, column.id);
+      onBoardChange(updatedBoard);
+
+      // Close loading toast and show success
+      toast.close("delete-column-toast");
+      toast({
+        title: "List deleted",
         status: "success",
         duration: 2000,
         isClosable: true,
       });
     } catch (error) {
-      console.error("Failed to delete column:", error);
-      toast({
-        title: "Error",
-        description: "Failed to delete column",
-        status: "error",
-        duration: 3000,
-        isClosable: true,
-      });
+      toast.close("delete-column-toast");
+      handleError(error, toast);
     }
   };
 
