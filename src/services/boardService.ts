@@ -258,6 +258,56 @@ export async function addCard(
   return board;
 }
 
+export const updateCard = async (
+  boardId: string,
+  columnId: string,
+  cardId: string,
+  data: {
+    title?: string;
+    description?: string;
+    labels?: string[];
+    dueDate?: string;
+  }
+): Promise<any> => {
+  const response = await fetch(
+    `/api/boards/${boardId}/columns/${columnId}/cards/${cardId}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || "Failed to update card");
+  }
+
+  return response.json();
+};
+
+// Delete a card
+export const deleteCard = async (
+  boardId: string,
+  columnId: string,
+  cardId: string
+): Promise<any> => {
+  const response = await fetch(
+    `/api/boards/${boardId}/columns/${columnId}/cards/${cardId}`,
+    {
+      method: "DELETE",
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || "Failed to delete card");
+  }
+
+  return response.json();
+};
 export async function deleteColumn(
   boardId: string,
   columnId: string

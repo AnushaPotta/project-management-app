@@ -1,89 +1,130 @@
-// src/components/board/Card.tsx
+"use client";
+
 import { useState } from "react";
+import { useMutation, gql } from "@apollo/client";
 import {
   Box,
   Text,
-  IconButton,
-  useDisclosure,
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalFooter,
-  ModalBody,
-  ModalCloseButton,
-  Button,
-  Input,
-  Textarea,
-  useToast,
-  Flex,
+  Badge,
   useColorModeValue,
+  Flex,
+  useToast,
 } from "@chakra-ui/react";
-import { FiEdit2 } from "react-icons/fi";
-import { Draggable } from "react-beautiful-dnd";
-import { updateBoard } from "@/services/boardService";
-import { Board, Card as CardType } from "@/types/board";
+import { Draggable } from "@hello-pangea/dnd";
+import { FiCalendar } from "react-icons/fi";
+import CardModal from "./CardModal";
+
+// GraphQL mutations
+const DELETE_CARD = gql`
+  mutation DeleteCard($cardId: ID!) {
+    deleteCard(cardId: $cardId) {
+      id
+    }
+  }
+`;
+
+// Available label colors with visual properties
+const LABEL_COLORS = {
+  red: { bg: "red.500", color: "white", name: "Red" },
+  orange: { bg: "orange.400", color: "white", name: "Orange" },
+  yellow: { bg: "yellow.400", color: "black", name: "Yellow" },
+  green: { bg: "green.500", color: "white", name: "Green" },
+  teal: { bg: "teal.500", color: "white", name: "Teal" },
+  blue: { bg: "blue.500", color: "white", name: "Blue" },
+  cyan: { bg: "cyan.500", color: "white", name: "Cyan" },
+  purple: { bg: "purple.500", color: "white", name: "Purple" },
+  pink: { bg: "pink.500", color: "white", name: "Pink" },
+};
 
 interface CardProps {
-  card: CardType;
+  card: {
+    id: string;
+    title: string;
+    description?: string;
+    labels?: string[];
+    dueDate?: string;
+    order: number;
+  };
   index: number;
-  boardId: string;
   columnId: string;
-  onBoardChange: (board: Board) => void;
+  boardId: string;
+  onCardUpdate: (updatedCard: any) => void;
+  onCardDelete: (cardId: string) => void;
 }
 
 export default function Card({
   card,
   index,
-  boardId,
   columnId,
-  onBoardChange,
+  boardId,
+  onCardUpdate,
+  onCardDelete,
 }: CardProps) {
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const [title, setTitle] = useState(card.title);
-  const [description, setDescription] = useState(card.description || "");
-  const toast = useToast();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
+  const toast = useToast();
   const cardBg = useColorModeValue("white", "gray.700");
   const cardBorder = useColorModeValue("gray.200", "gray.600");
 
-  const handleSaveCard = async () => {
-    try {
-      // Find the column and update the card
-      const updatedBoard = await updateBoard(boardId, {
-        columns: [
-          {
-            id: columnId,
-            cards: [
-              {
-                ...card,
-                title,
-                description,
-              },
-            ],
-          },
-        ],
-      });
-
-      onBoardChange(updatedBoard);
-      onClose();
-
+  // Delete card mutation
+  const [deleteCard] = useMutation(DELETE_CARD, {
+    onError: (error) => {
       toast({
-        title: "Card updated",
-        status: "success",
-        duration: 2000,
-        isClosable: true,
-      });
-    } catch (error) {
-      console.error("Failed to update card:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update card",
+        title: "Error deleting card",
+        description: error.message,
         status: "error",
         duration: 3000,
-        isClosable: true,
       });
+    },
+  });
+
+  const handleDeleteCard = async () => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this card?"
+    );
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    try {
+      await deleteCard({
+        variables: {
+          cardId: card.id,
+        },
+      });
+
+      onCardDelete(card.id);
+
+      toast({
+        title: "Card deleted",
+        status: "success",
+        duration: 2000,
+      });
+
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error("Error deleting card:", error);
+    } finally {
+      setIsDeleting(false);
     }
+  };
+
+  // Format due date
+  const formatDueDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  // Check if due date is past
+  const isDueDatePast = () => {
+    if (!card.dueDate) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(card.dueDate);
+    return due < today;
   };
 
   return (
@@ -101,76 +142,76 @@ export default function Card({
             borderColor={cardBorder}
             borderRadius="md"
             boxShadow={snapshot.isDragging ? "md" : "sm"}
+            onClick={() => setIsModalOpen(true)}
             position="relative"
             _hover={{ boxShadow: "md" }}
           >
+            {/* Display labels at the top */}
+            {card.labels && card.labels.length > 0 && (
+              <Flex mb={2} flexWrap="wrap" gap={1}>
+                {card.labels.map((label) => {
+                  const labelInfo =
+                    LABEL_COLORS[label as keyof typeof LABEL_COLORS];
+                  return (
+                    <Box
+                      key={label}
+                      bg={labelInfo?.bg || "gray.500"}
+                      h="8px"
+                      w="40px"
+                      borderRadius="full"
+                    />
+                  );
+                })}
+              </Flex>
+            )}
+
             <Text fontWeight="medium">{card.title}</Text>
 
+            {/* Show short description preview if available */}
             {card.description && (
-              <Text fontSize="sm" color="gray.500" mt={1} noOfLines={2}>
+              <Text
+                fontSize="sm"
+                color="gray.500"
+                mt={1}
+                noOfLines={2}
+                overflow="hidden"
+                textOverflow="ellipsis"
+              >
                 {card.description}
               </Text>
             )}
 
-            <Box position="absolute" top={2} right={2}>
-              <IconButton
-                aria-label="Edit card"
-                icon={<FiEdit2 />}
-                size="xs"
-                variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpen();
-                }}
-              />
-            </Box>
+            {/* Show due date badge if set */}
+            {card.dueDate && (
+              <Flex mt={2} alignItems="center">
+                <Badge
+                  colorScheme={isDueDatePast() ? "red" : "green"}
+                  display="flex"
+                  alignItems="center"
+                  fontSize="xs"
+                  px={1}
+                >
+                  <FiCalendar style={{ marginRight: "4px" }} />
+                  {formatDueDate(card.dueDate)}
+                </Badge>
+              </Flex>
+            )}
           </Box>
         )}
       </Draggable>
 
-      {/* Card Edit Modal */}
-      <Modal isOpen={isOpen} onClose={onClose}>
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Edit Card</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <Flex direction="column" gap={4}>
-              <Box>
-                <Text mb={1} fontWeight="medium">
-                  Title
-                </Text>
-                <Input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Card title"
-                />
-              </Box>
-
-              <Box>
-                <Text mb={1} fontWeight="medium">
-                  Description
-                </Text>
-                <Textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Add a more detailed description..."
-                  rows={4}
-                />
-              </Box>
-            </Flex>
-          </ModalBody>
-
-          <ModalFooter>
-            <Button variant="ghost" mr={3} onClick={onClose}>
-              Cancel
-            </Button>
-            <Button colorScheme="blue" onClick={handleSaveCard}>
-              Save
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+      {/* Card Modal */}
+      {isModalOpen && (
+        <CardModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          card={card}
+          columnId={columnId}
+          onDelete={handleDeleteCard}
+          onCardUpdate={onCardUpdate}
+          isDeleting={isDeleting}
+        />
+      )}
     </>
   );
 }

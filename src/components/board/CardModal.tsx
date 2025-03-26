@@ -28,46 +28,53 @@ import {
   MenuItem,
   Divider,
   FormErrorMessage,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverBody,
+  PopoverHeader,
+  PopoverFooter,
+  PopoverArrow,
+  Wrap,
+  WrapItem,
+  useColorModeValue,
 } from "@chakra-ui/react";
-import { FiTrash2, FiCalendar, FiTag, FiMoreHorizontal } from "react-icons/fi";
+import {
+  FiTrash2,
+  FiCalendar,
+  FiTag,
+  FiMoreHorizontal,
+  FiClock,
+  FiX,
+  FiCheck,
+} from "react-icons/fi";
 
 // GraphQL mutations
 const UPDATE_CARD = gql`
-  mutation UpdateCard(
-    $id: ID!
-    $title: String
-    $description: String
-    $labels: [String]
-    $dueDate: String
-  ) {
-    updateCard(
-      id: $id
-      title: $title
-      description: $description
-      labels: $labels
-      dueDate: $dueDate
-    ) {
+  mutation UpdateCard($cardId: ID!, $input: CardUpdateInput!) {
+    updateCard(cardId: $cardId, input: $input) {
       id
       title
       description
-      labels
+      assignedTo
       dueDate
+      labels
     }
   }
 `;
 
-// Available label colors
-const LABEL_COLORS = [
-  "red",
-  "orange",
-  "yellow",
-  "green",
-  "teal",
-  "blue",
-  "cyan",
-  "purple",
-  "pink",
-];
+// Available label colors with visual properties
+const LABEL_COLORS = {
+  red: { bg: "red.500", color: "white", name: "Red" },
+  orange: { bg: "orange.400", color: "white", name: "Orange" },
+  yellow: { bg: "yellow.400", color: "black", name: "Yellow" },
+  green: { bg: "green.500", color: "white", name: "Green" },
+  teal: { bg: "teal.500", color: "white", name: "Teal" },
+  blue: { bg: "blue.500", color: "white", name: "Blue" },
+  cyan: { bg: "cyan.500", color: "white", name: "Cyan" },
+  purple: { bg: "purple.500", color: "white", name: "Purple" },
+  pink: { bg: "pink.500", color: "white", name: "Pink" },
+};
 
 interface CardModalProps {
   isOpen: boolean;
@@ -81,6 +88,8 @@ interface CardModalProps {
   };
   columnId: string;
   onDelete: () => void;
+  onCardUpdate: (updatedCard: any) => void;
+  isDeleting: boolean;
 }
 
 export default function CardModal({
@@ -88,6 +97,8 @@ export default function CardModal({
   onClose,
   card,
   onDelete,
+  onCardUpdate,
+  isDeleting,
 }: CardModalProps) {
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description || "");
@@ -95,12 +106,15 @@ export default function CardModal({
   const [dueDate, setDueDate] = useState(card.dueDate || "");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleError, setTitleError] = useState("");
-  const [showLabelSelector, setShowLabelSelector] = useState(false);
+  const [isLabelPopoverOpen, setIsLabelPopoverOpen] = useState(false);
+  const [isDueDatePopoverOpen, setIsDueDatePopoverOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
+  const labelBgColor = useColorModeValue("gray.100", "gray.700");
 
-  const [updateCard, { loading }] = useMutation(UPDATE_CARD, {
+  const [updateCard] = useMutation(UPDATE_CARD, {
     onError: (error) => {
       toast({
         title: "Error updating card",
@@ -117,28 +131,40 @@ export default function CardModal({
     }
   }, [isEditingTitle]);
 
-  const handleSave = () => {
+  const handleSaveCard = async () => {
     if (!title.trim()) {
       setTitleError("Title is required");
       return;
     }
 
-    updateCard({
-      variables: {
-        id: card.id,
-        title: title.trim(),
-        description: description.trim() || null,
-        labels: labels.length > 0 ? labels : null,
-        dueDate: dueDate || null,
-      },
-    }).then(() => {
+    setIsSaving(true);
+    try {
+      const { data } = await updateCard({
+        variables: {
+          cardId: card.id,
+          input: {
+            title: title.trim(),
+            description: description.trim() || null,
+            labels: labels.length > 0 ? labels : null,
+            dueDate: dueDate || null,
+          },
+        },
+      });
+
+      onCardUpdate(data.updateCard);
+
       toast({
         title: "Card updated",
         status: "success",
         duration: 2000,
       });
+
       onClose();
-    });
+    } catch (error) {
+      console.error("Error saving card:", error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleTitleSubmit = () => {
@@ -152,8 +178,10 @@ export default function CardModal({
 
     updateCard({
       variables: {
-        id: card.id,
-        title: title.trim(),
+        cardId: card.id,
+        input: {
+          title: title.trim(),
+        },
       },
     }).catch((error) => {
       toast({
@@ -174,8 +202,10 @@ export default function CardModal({
   const handleDescriptionBlur = () => {
     updateCard({
       variables: {
-        id: card.id,
-        description: description.trim() || null,
+        cardId: card.id,
+        input: {
+          description: description.trim() || null,
+        },
       },
     }).catch((error) => {
       toast({
@@ -189,20 +219,61 @@ export default function CardModal({
 
   const handleDueDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setDueDate(e.target.value);
+  };
 
+  const saveDueDate = () => {
     updateCard({
       variables: {
-        id: card.id,
-        dueDate: e.target.value || null,
+        cardId: card.id,
+        input: {
+          dueDate: dueDate || null,
+        },
       },
-    }).catch((error) => {
-      toast({
-        title: "Error updating due date",
-        description: error.message,
-        status: "error",
-        duration: 3000,
+    })
+      .then(() => {
+        setIsDueDatePopoverOpen(false);
+        toast({
+          title: "Due date updated",
+          status: "success",
+          duration: 2000,
+        });
+      })
+      .catch((error) => {
+        toast({
+          title: "Error updating due date",
+          description: error.message,
+          status: "error",
+          duration: 3000,
+        });
       });
-    });
+  };
+
+  const removeDueDate = () => {
+    setDueDate("");
+    updateCard({
+      variables: {
+        cardId: card.id,
+        input: {
+          dueDate: null,
+        },
+      },
+    })
+      .then(() => {
+        setIsDueDatePopoverOpen(false);
+        toast({
+          title: "Due date removed",
+          status: "success",
+          duration: 2000,
+        });
+      })
+      .catch((error) => {
+        toast({
+          title: "Error removing due date",
+          description: error.message,
+          status: "error",
+          duration: 3000,
+        });
+      });
   };
 
   const toggleLabel = (color: string) => {
@@ -214,8 +285,10 @@ export default function CardModal({
 
     updateCard({
       variables: {
-        id: card.id,
-        labels: updatedLabels.length > 0 ? updatedLabels : null,
+        cardId: card.id,
+        input: {
+          labels: updatedLabels.length > 0 ? updatedLabels : null,
+        },
       },
     }).catch((error) => {
       toast({
@@ -227,9 +300,48 @@ export default function CardModal({
     });
   };
 
-  const handleDeleteConfirm = () => {
-    onDelete();
-    onClose();
+  // Function to check if due date is past
+  const isDueDatePast = () => {
+    if (!dueDate) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(dueDate);
+    return due < today;
+  };
+
+  // Function to format due date
+  const formatDueDate = (dateString: string) => {
+    const date = new Date(dateString);
+
+    const isToday = () => {
+      const today = new Date();
+      return (
+        date.getDate() === today.getDate() &&
+        date.getMonth() === today.getMonth() &&
+        date.getFullYear() === today.getFullYear()
+      );
+    };
+
+    const isTomorrow = () => {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return (
+        date.getDate() === tomorrow.getDate() &&
+        date.getMonth() === tomorrow.getMonth() &&
+        date.getFullYear() === tomorrow.getFullYear()
+      );
+    };
+
+    if (isToday()) return "Today";
+    if (isTomorrow()) return "Tomorrow";
+
+    // Otherwise return formatted date
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year:
+        date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+    });
   };
 
   return (
@@ -275,143 +387,197 @@ export default function CardModal({
         <ModalCloseButton />
 
         <ModalBody>
-          <Flex mb={6}>
-            <Text fontSize="sm" color="gray.500" width="100px">
-              In column
-            </Text>
-            <Text fontSize="sm" fontWeight="medium">
-              {/* You might want to fetch the column name here */}
-              Column
-            </Text>
+          <Flex direction="column" gap={4}>
+            {/* Labels section */}
+            {labels.length > 0 && (
+              <Box>
+                <Text mb={1} fontWeight="medium">
+                  Labels
+                </Text>
+                <Wrap spacing={2}>
+                  {labels.map((label) => {
+                    const labelInfo =
+                      LABEL_COLORS[label as keyof typeof LABEL_COLORS];
+                    return (
+                      <WrapItem key={label}>
+                        <Badge
+                          bg={labelInfo?.bg || "gray.500"}
+                          color={labelInfo?.color || "white"}
+                          px={2}
+                          py={1}
+                          borderRadius="md"
+                          fontSize="sm"
+                          cursor="pointer"
+                          onClick={() => toggleLabel(label)}
+                        >
+                          {labelInfo?.name || label}
+                        </Badge>
+                      </WrapItem>
+                    );
+                  })}
+                </Wrap>
+              </Box>
+            )}
+
+            {/* Due date section */}
+            {dueDate && (
+              <Box>
+                <Text mb={1} fontWeight="medium">
+                  Due Date
+                </Text>
+                <Badge
+                  colorScheme={isDueDatePast() ? "red" : "green"}
+                  display="flex"
+                  alignItems="center"
+                  px={2}
+                  py={1}
+                  borderRadius="md"
+                >
+                  <FiCalendar style={{ marginRight: "6px" }} />
+                  {formatDueDate(dueDate)}
+                </Badge>
+              </Box>
+            )}
+
+            {/* Description section */}
+            <Box>
+              <Text mb={1} fontWeight="medium">
+                Description
+              </Text>
+              <Textarea
+                value={description}
+                onChange={handleDescriptionChange}
+                onBlur={handleDescriptionBlur}
+                placeholder="Add a more detailed description..."
+                minH="120px"
+                resize="vertical"
+              />
+            </Box>
           </Flex>
-
-          {labels.length > 0 && (
-            <Box mb={6}>
-              <Text fontSize="sm" color="gray.500" mb={2}>
-                Labels
-              </Text>
-              <Flex flexWrap="wrap" gap={2}>
-                {labels.map((label) => (
-                  <Badge
-                    key={label}
-                    colorScheme={label}
-                    px={2}
-                    py={1}
-                    borderRadius="md"
-                    cursor="pointer"
-                    onClick={() => toggleLabel(label)}
-                  >
-                    {label}
-                  </Badge>
-                ))}
-              </Flex>
-            </Box>
-          )}
-
-          {dueDate && (
-            <Box mb={6}>
-              <Text fontSize="sm" color="gray.500" mb={2}>
-                Due Date
-              </Text>
-              <Text fontSize="sm">
-                {new Date(dueDate).toLocaleDateString(undefined, {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </Text>
-            </Box>
-          )}
-
-          <Box mb={6}>
-            <FormLabel fontSize="sm" color="gray.500">
-              Description
-            </FormLabel>
-            <Textarea
-              value={description}
-              onChange={handleDescriptionChange}
-              onBlur={handleDescriptionBlur}
-              placeholder="Add a more detailed description..."
-              minH="120px"
-              resize="vertical"
-            />
-          </Box>
-
-          {showLabelSelector && (
-            <Box mb={6}>
-              <Text fontSize="sm" color="gray.500" mb={2}>
-                Labels
-              </Text>
-              <Flex flexWrap="wrap" gap={2}>
-                {LABEL_COLORS.map((color) => (
-                  <Badge
-                    key={color}
-                    colorScheme={color}
-                    px={2}
-                    py={1}
-                    borderRadius="md"
-                    cursor="pointer"
-                    opacity={labels.includes(color) ? 1 : 0.6}
-                    onClick={() => toggleLabel(color)}
-                  >
-                    {color}
-                  </Badge>
-                ))}
-              </Flex>
-            </Box>
-          )}
         </ModalBody>
 
         <Divider />
 
         <ModalFooter justifyContent="space-between">
           <HStack spacing={2}>
-            <Button
-              leftIcon={<FiTag />}
-              size="sm"
-              variant="ghost"
-              onClick={() => setShowLabelSelector(!showLabelSelector)}
+            {/* Labels Popover */}
+            <Popover
+              isOpen={isLabelPopoverOpen}
+              onClose={() => setIsLabelPopoverOpen(false)}
+              placement="bottom-start"
             >
-              Labels
-            </Button>
-            <Button
-              leftIcon={<FiCalendar />}
-              size="sm"
-              variant="ghost"
-              onClick={() => document.getElementById("dueDateInput")?.click()}
+              <PopoverTrigger>
+                <Button
+                  leftIcon={<FiTag />}
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setIsLabelPopoverOpen(!isLabelPopoverOpen)}
+                >
+                  Labels
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent width="250px">
+                <PopoverArrow />
+                <PopoverHeader fontWeight="medium" py={2}>
+                  Labels
+                </PopoverHeader>
+                <PopoverBody>
+                  <Wrap spacing={1}>
+                    {Object.entries(LABEL_COLORS).map(
+                      ([key, { bg, color, name }]) => (
+                        <WrapItem key={key} width="100%">
+                          <Button
+                            width="100%"
+                            justifyContent="flex-start"
+                            height="30px"
+                            bg={bg}
+                            color={color}
+                            _hover={{ opacity: 0.8 }}
+                            leftIcon={
+                              labels.includes(key) ? <FiCheck /> : undefined
+                            }
+                            onClick={() => toggleLabel(key)}
+                          >
+                            {name}
+                          </Button>
+                        </WrapItem>
+                      )
+                    )}
+                  </Wrap>
+                </PopoverBody>
+              </PopoverContent>
+            </Popover>
+
+            {/* Due Date Popover */}
+            <Popover
+              isOpen={isDueDatePopoverOpen}
+              onClose={() => setIsDueDatePopoverOpen(false)}
+              placement="bottom-start"
             >
-              Due Date
-            </Button>
-            <Input
-              id="dueDateInput"
-              type="date"
-              value={dueDate}
-              onChange={handleDueDateChange}
-              display="none"
-            />
+              <PopoverTrigger>
+                <Button
+                  leftIcon={<FiCalendar />}
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setIsDueDatePopoverOpen(!isDueDatePopoverOpen)}
+                >
+                  Due Date
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent width="250px">
+                <PopoverArrow />
+                <PopoverHeader fontWeight="medium" py={2}>
+                  Due Date
+                </PopoverHeader>
+                <PopoverBody>
+                  <Input
+                    type="date"
+                    value={dueDate}
+                    onChange={handleDueDateChange}
+                    size="md"
+                  />
+                </PopoverBody>
+                <PopoverFooter display="flex" justifyContent="space-between">
+                  {dueDate && (
+                    <Button
+                      size="sm"
+                      leftIcon={<FiX />}
+                      variant="ghost"
+                      onClick={removeDueDate}
+                      colorScheme="red"
+                    >
+                      Remove
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    colorScheme="blue"
+                    onClick={saveDueDate}
+                    isDisabled={!dueDate}
+                    ml="auto"
+                  >
+                    Save
+                  </Button>
+                </PopoverFooter>
+              </PopoverContent>
+            </Popover>
           </HStack>
 
           <HStack spacing={2}>
-            <Menu>
-              <MenuButton
-                as={IconButton}
-                icon={<FiMoreHorizontal />}
-                variant="ghost"
-                size="sm"
-                aria-label="More options"
-              />
-              <MenuList>
-                <MenuItem
-                  icon={<FiTrash2 />}
-                  color="red.500"
-                  onClick={handleDeleteConfirm}
-                >
-                  Delete Card
-                </MenuItem>
-              </MenuList>
-            </Menu>
-            <Button colorScheme="blue" onClick={handleSave} isLoading={loading}>
+            <Button
+              colorScheme="red"
+              variant="ghost"
+              onClick={onDelete}
+              isLoading={isDeleting}
+              leftIcon={<FiTrash2 />}
+            >
+              Delete
+            </Button>
+            <Button
+              colorScheme="blue"
+              onClick={handleSaveCard}
+              isLoading={isSaving}
+            >
               Save
             </Button>
           </HStack>
