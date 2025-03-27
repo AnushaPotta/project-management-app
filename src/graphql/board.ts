@@ -196,6 +196,8 @@ export const ADD_CARD = gql`
       id
       columns {
         id
+        title
+        order
         cards {
           id
           title

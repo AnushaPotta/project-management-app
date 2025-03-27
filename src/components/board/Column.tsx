@@ -16,10 +16,15 @@ import {
   useColorModeValue,
 } from "@chakra-ui/react";
 import { FiPlus, FiMoreHorizontal, FiEdit2, FiTrash2 } from "react-icons/fi";
-import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { addCard, updateBoard } from "@/services/boardService";
+import { Draggable, Droppable } from "@hello-pangea/dnd";
 import { Board, Column as ColumnType } from "@/types/board";
 import Card from "./Card";
+import { useMutation } from "@apollo/client";
+import {
+  ADD_CARD,
+  UPDATE_COLUMN_MUTATION,
+  DELETE_COLUMN_MUTATION,
+} from "@/graphql/board";
 
 interface ColumnProps {
   column: ColumnType;
@@ -44,16 +49,36 @@ export default function Column({
   const bgColor = useColorModeValue("gray.100", "gray.700");
   const columnBg = useColorModeValue("white", "gray.800");
 
+  // Add GraphQL mutation hooks
+  const [addCardMutation, { loading: isAddingCardMutation }] =
+    useMutation(ADD_CARD);
+  const [updateColumnMutation] = useMutation(UPDATE_COLUMN_MUTATION);
+  const [deleteColumnMutation] = useMutation(DELETE_COLUMN_MUTATION);
+
   const handleAddCard = async () => {
     if (!newCardTitle.trim()) return;
 
     try {
-      const updatedBoard = await addCard(boardId, column.id, {
-        title: newCardTitle.trim(),
+      const { data } = await addCardMutation({
+        variables: {
+          columnId: column.id,
+          input: {
+            title: newCardTitle.trim(),
+          },
+        },
       });
-      onBoardChange(updatedBoard);
+
+      // Update the board with the returned data
+      onBoardChange(data.addCard);
       setNewCardTitle("");
       setIsAddingCard(false);
+
+      toast({
+        title: "Card added",
+        status: "success",
+        duration: 2000,
+        isClosable: true,
+      });
     } catch (error) {
       console.error("Failed to add card:", error);
       toast({
@@ -67,17 +92,33 @@ export default function Column({
   };
 
   const updateColumnTitle = async () => {
-    try {
-      // First get the current board to work with
-      const updatedColumns = [...column.cards];
+    if (!columnTitle.trim()) {
+      setColumnTitle(column.title); // Reset to original if empty
+      setIsEditingTitle(false);
+      return;
+    }
 
-      // Find and update the column title
-      const updatedBoard = await updateBoard(boardId, {
-        columns: updateColumnTitle,
+    try {
+      const { data } = await updateColumnMutation({
+        variables: {
+          columnId: column.id,
+          input: {
+            title: columnTitle.trim(),
+          },
+        },
       });
 
-      onBoardChange(updatedBoard);
+      // If your mutation returns the full board:
+      // onBoardChange(data.updateColumn);
+
       setIsEditingTitle(false);
+
+      toast({
+        title: "Column updated",
+        status: "success",
+        duration: 2000,
+        isClosable: true,
+      });
     } catch (error) {
       console.error("Failed to update column title:", error);
       toast({
@@ -92,7 +133,7 @@ export default function Column({
     }
   };
 
-  const deleteColumn = async () => {
+  const handleDeleteColumn = async () => {
     try {
       const confirmed = window.confirm(
         `Are you sure you want to delete the "${column.title}" list and all its cards?`
@@ -109,8 +150,13 @@ export default function Column({
         id: "delete-column-toast",
       });
 
-      const updatedBoard = await deleteColumn(boardId, column.id);
-      onBoardChange(updatedBoard);
+      const { data } = await deleteColumnMutation({
+        variables: {
+          columnId: column.id,
+        },
+      });
+
+      onBoardChange(data.deleteColumn);
 
       // Close loading toast and show success
       toast.close("delete-column-toast");
@@ -122,7 +168,14 @@ export default function Column({
       });
     } catch (error) {
       toast.close("delete-column-toast");
-      handleError(error, toast);
+      console.error("Failed to delete column:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete column",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
     }
   };
 
@@ -193,7 +246,7 @@ export default function Column({
                 >
                   Edit title
                 </MenuItem>
-                <MenuItem icon={<FiTrash2 />} onClick={deleteColumn}>
+                <MenuItem icon={<FiTrash2 />} onClick={handleDeleteColumn}>
                   Delete column
                 </MenuItem>
               </MenuList>
@@ -215,7 +268,20 @@ export default function Column({
                 bg={snapshot.isDraggingOver ? bgColor : "transparent"}
                 transition="background-color 0.2s ease"
               >
-                {/* Rest of the component... */}
+                {Array.isArray(column.cards) &&
+                  column.cards
+                    .sort((a, b) => a.order - b.order)
+                    .map((card, cardIndex) => (
+                      <Card
+                        key={card.id}
+                        card={card}
+                        index={cardIndex}
+                        columnId={column.id}
+                        boardId={boardId}
+                        onBoardChange={onBoardChange}
+                      />
+                    ))}
+                {provided.placeholder}
               </Box>
             )}
           </Droppable>
@@ -239,6 +305,7 @@ export default function Column({
                     colorScheme="blue"
                     onClick={handleAddCard}
                     mr={2}
+                    isLoading={isAddingCardMutation}
                   >
                     Add
                   </Button>

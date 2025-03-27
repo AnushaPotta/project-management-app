@@ -1,21 +1,8 @@
 // src/components/ApolloWrapper.tsx
 "use client";
 
-import {
-  ApolloClient,
-  InMemoryCache,
-  ApolloProvider,
-  HttpLink,
-} from "@apollo/client";
-
-// Create Apollo Client instance
-const client = new ApolloClient({
-  link: new HttpLink({
-    uri: "YOUR_GRAPHQL_ENDPOINT",
-    // Add any necessary headers or authentication
-  }),
-  cache: new InMemoryCache(),
-});
+import { ApolloProvider } from "@apollo/client";
+import { client } from "@/lib/apollo-client"; // Import the pre-configured client
 
 export default function ApolloWrapper({
   children,

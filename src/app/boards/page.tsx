@@ -1,4 +1,3 @@
-// src/app/boards/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -15,58 +14,47 @@ import {
   useColorModeValue,
 } from "@chakra-ui/react";
 import { FiPlus, FiAlertCircle } from "react-icons/fi";
-import { fetchAllBoards, createBoard } from "@/services/boardService";
-import { Board } from "@/types/board";
 import Link from "next/link";
 import { CreateBoardModal } from "@/components/board/CreateBoardModal";
+import { useQuery, useMutation } from "@apollo/client";
+import { GET_USER_BOARDS, CREATE_BOARD } from "@/graphql/board";
+import { Board } from "@/types/board";
 
 export default function BoardsPage() {
-  const [boards, setBoards] = useState<Board[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
   const toast = useToast();
 
   const bgColor = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.700");
   const hoverBgColor = useColorModeValue("gray.50", "gray.700");
 
-  useEffect(() => {
-    loadBoards();
-  }, []);
+  // GraphQL query to fetch all boards
+  const {
+    data,
+    loading: isLoading,
+    error: queryError,
+    refetch,
+  } = useQuery(GET_USER_BOARDS);
 
-  const loadBoards = async () => {
-    setIsLoading(true);
-    setError(null);
+  // GraphQL mutation to create a board
+  const [createBoardMutation, { loading: isCreating }] =
+    useMutation(CREATE_BOARD);
 
-    try {
-      const boardsData = await fetchAllBoards();
-      setBoards(boardsData);
-    } catch (err) {
-      console.error("Failed to load boards:", err);
-      setError("Failed to load your boards. Please try again.");
-      toast({
-        title: "Error",
-        description: "Failed to load boards",
-        status: "error",
-        duration: 5000,
-        isClosable: true,
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Extract boards from the GraphQL response
+  const boards: Board[] = data?.boards || [];
 
   const handleCreateBoard = async (boardData: {
     title: string;
     description?: string;
   }) => {
-    setIsCreating(true);
-
     try {
-      const newBoard = await createBoard(boardData);
-      setBoards((prevBoards) => [...prevBoards, newBoard]);
+      const { data } = await createBoardMutation({
+        variables: {
+          input: boardData,
+        },
+      });
+
+      refetch(); // Refetch boards list
       setIsCreateModalOpen(false);
 
       toast({
@@ -86,8 +74,6 @@ export default function BoardsPage() {
         duration: 5000,
         isClosable: true,
       });
-    } finally {
-      setIsCreating(false);
     }
   };
 
@@ -158,11 +144,11 @@ export default function BoardsPage() {
               bottom="5"
               left="5"
             >
-              {board.columns.length} columns •{" "}
-              {board.columns.reduce(
-                (count, col) => count + col.cards.length,
+              {board.columns?.length || 0} columns •{" "}
+              {board.columns?.reduce(
+                (count, col) => count + (col.cards?.length || 0),
                 0
-              )}{" "}
+              ) || 0}{" "}
               cards
             </Text>
 
@@ -207,12 +193,12 @@ export default function BoardsPage() {
       );
     }
 
-    if (error) {
+    if (queryError) {
       return (
         <Flex direction="column" align="center" justify="center" py={10}>
           <Icon as={FiAlertCircle} w={10} h={10} color="red.500" mb={4} />
-          <Text mb={4}>{error}</Text>
-          <Button onClick={loadBoards}>Try Again</Button>
+          <Text mb={4}>Failed to load your boards. Please try again.</Text>
+          <Button onClick={() => refetch()}>Try Again</Button>
         </Flex>
       );
     }

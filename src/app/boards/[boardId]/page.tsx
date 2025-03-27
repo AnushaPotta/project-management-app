@@ -1,4 +1,3 @@
-// src/app/boards/[boardId]/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -16,45 +15,62 @@ import {
 } from "@chakra-ui/react";
 import { FiPlus, FiStar, FiSettings } from "react-icons/fi";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-
-import { fetchBoard, updateBoard } from "@/services/boardService";
+import { useQuery, useMutation } from "@apollo/client";
+import {
+  GET_BOARD,
+  UPDATE_BOARD,
+  ADD_COLUMN,
+  MOVE_CARD,
+  MOVE_COLUMN,
+} from "@/graphql/board";
 import { Board } from "@/types/board";
 import Column from "@/components/board/Column";
 import AddColumnModal from "@/components/board/AddColumnModal";
-import { handleError } from "@/utils/error-handling";
 
 export default function BoardPage() {
   const { boardId } = useParams();
   const [board, setBoard] = useState<Board | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [isAddColumnModalOpen, setIsAddColumnModalOpen] = useState(false);
   const toast = useToast();
 
   const bgColor = useColorModeValue("gray.50", "gray.900");
   const headerBg = useColorModeValue("white", "gray.800");
 
-  useEffect(() => {
-    if (boardId) {
-      loadBoard(boardId as string);
-    }
-  }, [boardId]);
+  // GraphQL queries and mutations
+  const {
+    loading: isLoading,
+    error: queryError,
+    data,
+    refetch,
+  } = useQuery(GET_BOARD, {
+    variables: { id: boardId as string },
+    skip: !boardId,
+    fetchPolicy: "network-only", // Don't use cache for this query
+  });
 
-  const loadBoard = async (id: string) => {
-    setIsLoading(true);
-    try {
-      const boardData = await fetchBoard(id);
-      setBoard(boardData);
-    } catch (err) {
-      console.error("Failed to load board:", err);
-      setError("Failed to load board details. Please try again.");
-      handleError(err, toast);
-    } finally {
-      setIsLoading(false);
+  const [updateBoardMutation] = useMutation(UPDATE_BOARD);
+  const [addColumnMutation] = useMutation(ADD_COLUMN);
+  const [moveCardMutation] = useMutation(MOVE_CARD);
+  const [moveColumnMutation] = useMutation(MOVE_COLUMN);
+
+  useEffect(() => {
+    if (data?.board) {
+      setBoard(data.board);
     }
+  }, [data]);
+
+  const handleError = (error: any, toast: any) => {
+    console.error(error);
+    toast({
+      title: "Error",
+      description: error.message || "Something went wrong",
+      status: "error",
+      duration: 3000,
+      isClosable: true,
+    });
   };
 
-  const handleDragEnd = async (result: DropResult) => {
+  const handleDragEnd = async (result: any) => {
     const { destination, source, type } = result;
 
     // Dropped outside the list or no change
@@ -86,10 +102,20 @@ export default function BoardPage() {
       setBoard(newBoard);
 
       try {
-        await updateBoard(board.id, { columns: newColumns });
+        const { data } = await moveColumnMutation({
+          variables: {
+            boardId: board.id,
+            sourceIndex: source.index,
+            destinationIndex: destination.index,
+          },
+        });
+
+        if (data?.moveColumn) {
+          setBoard(data.moveColumn);
+        }
       } catch (error) {
         handleError(error, toast);
-        loadBoard(board.id); // Reload board to reset to server state
+        refetch(); // Reload board to reset to server state
       }
       return;
     }
@@ -144,37 +170,49 @@ export default function BoardPage() {
     setBoard(newBoard);
 
     try {
-      await updateBoard(board.id, { columns: newBoard.columns });
+      const { data } = await moveCardMutation({
+        variables: {
+          boardId: board.id,
+          source: {
+            droppableId: source.droppableId,
+            index: source.index,
+          },
+          destination: {
+            droppableId: destination.droppableId,
+            index: destination.index,
+          },
+        },
+      });
+
+      if (data?.moveCard) {
+        setBoard(data.moveCard);
+      }
     } catch (error) {
       handleError(error, toast);
-      loadBoard(board.id); // Reload board to reset to server state
+      refetch(); // Reload board to reset to server state
     }
   };
 
   const handleAddColumn = async (title: string) => {
-    if (!board) return;
+    if (!board || !title.trim()) return;
 
     try {
-      // Replace with your actual API call to add a column
-      const updatedBoard = await updateBoard(board.id, {
-        columns: [
-          ...board.columns,
-          {
-            id: `temp-id-${Date.now()}`, // This will be replaced by the server
-            title,
-            order: board.columns.length,
-            cards: [],
-          },
-        ],
+      const { data } = await addColumnMutation({
+        variables: {
+          boardId: board.id,
+          title: title.trim(),
+        },
       });
 
-      setBoard(updatedBoard);
-      toast({
-        title: "List added",
-        status: "success",
-        duration: 2000,
-        isClosable: true,
-      });
+      if (data?.addColumn) {
+        setBoard(data.addColumn);
+        toast({
+          title: "List added",
+          status: "success",
+          duration: 2000,
+          isClosable: true,
+        });
+      }
     } catch (error) {
       handleError(error, toast);
     }
@@ -184,10 +222,21 @@ export default function BoardPage() {
     if (!board) return;
 
     try {
-      const updatedBoard = await updateBoard(board.id, {
-        isStarred: !board.isStarred,
+      const { data } = await updateBoardMutation({
+        variables: {
+          id: board.id,
+          input: {
+            isStarred: !board.isStarred,
+          },
+        },
       });
-      setBoard(updatedBoard);
+
+      if (data?.updateBoard) {
+        setBoard({
+          ...board,
+          isStarred: data.updateBoard.isStarred,
+        });
+      }
     } catch (error) {
       handleError(error, toast);
     }
@@ -201,13 +250,11 @@ export default function BoardPage() {
     );
   }
 
-  if (error || !board) {
+  if (queryError || !board) {
     return (
       <Flex direction="column" align="center" justify="center" height="80vh">
-        <Text mb={4}>{error || "Board not found"}</Text>
-        <Button onClick={() => boardId && loadBoard(boardId as string)}>
-          Try Again
-        </Button>
+        <Text mb={4}>{queryError?.message || "Board not found"}</Text>
+        <Button onClick={() => refetch()}>Try Again</Button>
       </Flex>
     );
   }
@@ -273,7 +320,7 @@ export default function BoardPage() {
                 alignItems="flex-start"
                 minHeight="calc(100% - 32px)"
               >
-                {(Array.isArray(board.columns) ? board.columns : [])
+                {(Array.isArray(board.columns) ? [...board.columns] : [])
                   .sort((a, b) => a.order - b.order)
                   .map((column, index) => (
                     <Column
