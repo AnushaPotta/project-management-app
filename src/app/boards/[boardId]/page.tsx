@@ -273,7 +273,7 @@ export default function BoardPage() {
                 alignItems="flex-start"
                 minHeight="calc(100% - 32px)"
               >
-                {board.columns
+                {(Array.isArray(board.columns) ? board.columns : [])
                   .sort((a, b) => a.order - b.order)
                   .map((column, index) => (
                     <Column
