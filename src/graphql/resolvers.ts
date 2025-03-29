@@ -1,280 +1,833 @@
 // src/graphql/resolvers.ts
-
-// Mock data
-const mockBoards = [
-  {
-    id: "1",
-    title: "Project Alpha",
-    description: "Main development project",
-    background: "blue",
-    isStarred: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    members: [
-      {
-        id: "1",
-        name: "John Doe",
-        email: "john@example.com",
-        avatar: null,
-        role: "ADMIN",
-      },
-    ],
-    columns: [
-      {
-        id: "1",
-        title: "To Do",
-        order: 0,
-        cards: [
-          {
-            id: "1",
-            title: "Research API options",
-            description: "Evaluate different API technologies",
-            order: 0,
-            columnId: "1",
-            assignedTo: null,
-            dueDate: null,
-            labels: ["research"],
-          },
-        ],
-      },
-      {
-        id: "2",
-        title: "In Progress",
-        order: 1,
-        cards: [],
-      },
-      {
-        id: "3",
-        title: "Done",
-        order: 2,
-        cards: [],
-      },
-    ],
-  },
-];
+import { adminDb } from "@/lib/firebase-admin";
+import { firestore } from "firebase-admin";
 
 export const resolvers = {
   Query: {
-    boards: () => mockBoards,
-    board: (_, { id }) => mockBoards.find((board) => board.id === id),
+    // Get all boards for the current user
+    boards: async (_, __, { user }) => {
+      try {
+        if (!user) {
+          throw new Error("Not authenticated");
+        }
+
+        const boardsRef = adminDb.collection("boards");
+        const snapshot = await boardsRef
+          .where("members", "array-contains", { id: user.uid })
+          .get();
+
+        return snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+      } catch (error) {
+        console.error("Error fetching boards:", error);
+        throw new Error("Failed to fetch boards");
+      }
+    },
+
+    // Get a single board by ID
+    board: async (_, { id }, { user }) => {
+      try {
+        if (!user) {
+          throw new Error("Not authenticated");
+        }
+
+        const docRef = adminDb.collection("boards").doc(id);
+        const docSnap = await docRef.get();
+
+        if (!docSnap.exists) {
+          return null;
+        }
+
+        // Check if user is a member of this board
+        const boardData = docSnap.data();
+        if (!boardData) {
+          throw new Error("Board data is missing");
+        }
+
+        const isMember = boardData.members.some(
+          (member) => member.id === user.uid
+        );
+
+        if (!isMember) {
+          throw new Error("Not authorized to view this board");
+        }
+
+        return {
+          id: docSnap.id,
+          ...boardData,
+        };
+      } catch (error) {
+        console.error("Error fetching board:", error);
+        throw new Error("Failed to fetch board");
+      }
+    },
   },
+
   Mutation: {
-    createBoard: (_, { input }) => {
-      const newBoard = {
-        id: String(mockBoards.length + 1),
-        ...input,
-        isStarred: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        members: [],
-        columns: [],
-      };
-      mockBoards.push(newBoard);
-      return newBoard;
-    },
-    updateBoard: (_, { id, input }) => {
-      const boardIndex = mockBoards.findIndex((board) => board.id === id);
-      if (boardIndex === -1) return null;
-
-      mockBoards[boardIndex] = {
-        ...mockBoards[boardIndex],
-        ...input,
-        updatedAt: new Date().toISOString(),
-      };
-
-      return mockBoards[boardIndex];
-    },
-    // Add other mutation resolvers as needed
-    inviteMember: (_, { boardId, email }) => {
-      const board = mockBoards.find((b) => b.id === boardId);
-      if (!board) return null;
-
-      // In a real implementation, you would validate and invite the user
-      // For mock purposes we'll just add a fake user
-      const newMember = {
-        id: `user-${Date.now()}`,
-        name: `User ${email}`,
-        email,
-        avatar: null,
-        role: "MEMBER",
-      };
-
-      board.members.push(newMember);
-      return board;
-    },
-    removeMember: (_, { boardId, memberId }) => {
-      const board = mockBoards.find((b) => b.id === boardId);
-      if (!board) return null;
-
-      board.members = board.members.filter((m) => m.id !== memberId);
-      return board;
-    },
-    addColumn: (_, { boardId, title }) => {
-      const board = mockBoards.find((b) => b.id === boardId);
-      if (!board) return null;
-
-      const newColumn = {
-        id: `col-${Date.now()}`,
-        title,
-        order: board.columns.length,
-        cards: [],
-      };
-
-      board.columns.push(newColumn);
-      return board;
-    },
-    updateColumn: (_, { columnId, input }) => {
-      let updatedColumn = null;
-
-      mockBoards.forEach((board) => {
-        const column = board.columns.find((c) => c.id === columnId);
-        if (column) {
-          Object.assign(column, input);
-          updatedColumn = column;
+    // Create a new board
+    createBoard: async (_, { input }, { user }) => {
+      try {
+        if (!user) {
+          throw new Error("Not authenticated");
         }
-      });
 
-      return updatedColumn;
+        // Create initial member data with the current user as admin
+        const currentUser = {
+          id: user.uid,
+          name: user.name || user.displayName || "User",
+          email: user.email || "",
+          avatar: user.picture || user.photoURL || null,
+          role: "ADMIN",
+        };
+
+        // Create board data
+        const boardData = {
+          title: input.title,
+          description: input.description || "",
+          background: input.background || "#FFFFFF",
+          isStarred: false,
+          createdAt: firestore.Timestamp.now(),
+          updatedAt: firestore.Timestamp.now(),
+          members: [currentUser],
+          columns: [],
+        };
+
+        // Add to Firestore
+        const docRef = await adminDb.collection("boards").add(boardData);
+
+        return {
+          id: docRef.id,
+          ...boardData,
+        };
+      } catch (error) {
+        console.error("Error creating board:", error);
+        throw new Error("Failed to create board");
+      }
     },
-    deleteColumn: (_, { columnId }) => {
-      const board = mockBoards.find((b) =>
-        b.columns.some((c) => c.id === columnId)
-      );
 
-      if (!board) return null;
-
-      const columnIndex = board.columns.findIndex((c) => c.id === columnId);
-      if (columnIndex === -1) return null;
-
-      // Remove the column
-      board.columns.splice(columnIndex, 1);
-
-      // Reorder remaining columns
-      board.columns.forEach((col, index) => {
-        if (index >= columnIndex) {
-          col.order = index;
+    // Update a board
+    updateBoard: async (_, { id, input }, { user }) => {
+      try {
+        if (!user) {
+          throw new Error("Not authenticated");
         }
-      });
 
-      return board;
+        const boardRef = adminDb.collection("boards").doc(id);
+        const boardSnap = await boardRef.get();
+
+        if (!boardSnap.exists) {
+          throw new Error("Board not found");
+        }
+
+        // Check if user is an admin of this board
+        const boardData = boardSnap.data();
+        if (!boardData) {
+          throw new Error("Board data is missing");
+        }
+
+        const userMember = boardData.members.find(
+          (member) => member.id === user.uid
+        );
+
+        if (!userMember || userMember.role !== "ADMIN") {
+          throw new Error("Not authorized to update this board");
+        }
+
+        const updatedData = {
+          ...input,
+          updatedAt: firestore.Timestamp.now(),
+        };
+
+        await boardRef.update(updatedData);
+
+        return {
+          id,
+          ...boardData,
+          ...updatedData,
+        };
+      } catch (error) {
+        console.error("Error updating board:", error);
+        throw new Error("Failed to update board");
+      }
     },
-    moveColumn: (_, { boardId, sourceIndex, destinationIndex }) => {
-      const board = mockBoards.find((b) => b.id === boardId);
-      if (!board) return null;
 
-      const columns = [...board.columns];
-      const [removed] = columns.splice(sourceIndex, 1);
-      columns.splice(destinationIndex, 0, removed);
+    // Delete a board
+    deleteBoard: async (_, { id }, { user }) => {
+      try {
+        if (!user) {
+          throw new Error("Not authenticated");
+        }
 
-      // Update orders
-      columns.forEach((col, index) => {
-        col.order = index;
-      });
+        const boardRef = adminDb.collection("boards").doc(id);
+        const boardSnap = await boardRef.get();
 
-      board.columns = columns;
-      return board;
+        if (!boardSnap.exists) {
+          throw new Error("Board not found");
+        }
+
+        // Check if user is an admin of this board
+        const boardData = boardSnap.data();
+        if (!boardData) {
+          throw new Error("Board data is missing");
+        }
+
+        const userMember = boardData.members.find(
+          (member) => member.id === user.uid
+        );
+
+        if (!userMember || userMember.role !== "ADMIN") {
+          throw new Error("Not authorized to delete this board");
+        }
+
+        await boardRef.delete();
+
+        return true;
+      } catch (error) {
+        console.error("Error deleting board:", error);
+        throw new Error("Failed to delete board");
+      }
     },
-    addCard: (_, { columnId, input }) => {
-      const board = mockBoards.find((b) =>
-        b.columns.some((col) => col.id === columnId)
-      );
 
-      if (!board) return null;
+    // Add a new column to a board
+    addColumn: async (_, { boardId, title }, { user }) => {
+      try {
+        if (!user) {
+          throw new Error("Not authenticated");
+        }
 
-      const column = board.columns.find((col) => col.id === columnId);
-      if (!column) return null;
+        const boardRef = adminDb.collection("boards").doc(boardId);
+        const boardSnap = await boardRef.get();
 
-      const newCard = {
-        id: `card-${Date.now()}`,
-        ...input,
-        order: column.cards.length,
-        columnId,
-      };
+        if (!boardSnap.exists) {
+          throw new Error("Board not found");
+        }
 
-      column.cards.push(newCard);
-      return board;
-    },
+        // Check if user is a member of this board
+        const boardData = boardSnap.data();
+        if (!boardData) {
+          throw new Error("Board data is missing");
+        }
 
-    // New resolver for updating cards
-    updateCard: (_, { cardId, input }) => {
-      let updatedCard = null;
+        const isMember = boardData.members.some(
+          (member) => member.id === user.uid
+        );
 
-      mockBoards.forEach((board) => {
-        board.columns.forEach((column) => {
-          const cardIndex = column.cards.findIndex(
-            (card) => card.id === cardId
-          );
-          if (cardIndex !== -1) {
-            // Update the card with new values
-            column.cards[cardIndex] = {
-              ...column.cards[cardIndex],
-              ...input,
-            };
-            updatedCard = column.cards[cardIndex];
-          }
+        if (!isMember) {
+          throw new Error("Not authorized to add columns to this board");
+        }
+
+        const newColumn = {
+          id: firestore.Timestamp.now().toMillis().toString(), // Generate a unique ID
+          title: title,
+          order: boardData.columns.length,
+          cards: [],
+        };
+
+        // Add the new column to the columns array
+        const updatedColumns = [...boardData.columns, newColumn];
+
+        await boardRef.update({
+          columns: updatedColumns,
+          updatedAt: firestore.Timestamp.now(),
         });
-      });
 
-      return updatedCard;
+        return {
+          id: boardId,
+          ...boardData,
+          columns: updatedColumns,
+        };
+      } catch (error) {
+        console.error("Error adding column:", error);
+        throw new Error("Failed to add column");
+      }
     },
 
-    // New resolver for deleting cards
-    deleteCard: (_, { cardId }) => {
-      let affectedBoard = null;
+    // Update a column
+    updateColumn: async (_, { columnId, input }, { user }) => {
+      try {
+        if (!user) {
+          throw new Error("Not authenticated");
+        }
 
-      mockBoards.forEach((board) => {
-        board.columns.forEach((column) => {
-          const cardIndex = column.cards.findIndex(
-            (card) => card.id === cardId
-          );
+        // Find the board containing this column
+        const boardsRef = adminDb.collection("boards");
+        const querySnapshot = await boardsRef
+          .where("columns", "array-contains", { id: columnId })
+          .get();
 
-          if (cardIndex !== -1) {
-            // Remove the card
-            column.cards.splice(cardIndex, 1);
+        if (querySnapshot.empty) {
+          throw new Error("Column not found");
+        }
 
-            // Reorder remaining cards
-            column.cards.forEach((card, index) => {
-              if (index >= cardIndex) {
-                card.order = index;
-              }
-            });
+        const boardDoc = querySnapshot.docs[0];
+        const boardData = boardDoc.data();
+        if (!boardData) {
+          throw new Error("Board data is missing");
+        }
 
-            affectedBoard = board;
-          }
+        // Check if user is a member of this board
+        const isMember = boardData.members.some(
+          (member) => member.id === user.uid
+        );
+
+        if (!isMember) {
+          throw new Error("Not authorized to update columns on this board");
+        }
+
+        // Find the column to update
+        const columnIndex = boardData.columns.findIndex(
+          (col) => col.id === columnId
+        );
+
+        if (columnIndex === -1) {
+          throw new Error("Column not found");
+        }
+
+        // Create updated column data
+        const updatedColumn = {
+          ...boardData.columns[columnIndex],
+          ...input,
+        };
+
+        // Create a new columns array with the updated column
+        const updatedColumns = [...boardData.columns];
+        updatedColumns[columnIndex] = updatedColumn;
+
+        // Update the board with the new columns array
+        await adminDb.collection("boards").doc(boardDoc.id).update({
+          columns: updatedColumns,
+          updatedAt: firestore.Timestamp.now(),
         });
-      });
 
-      return affectedBoard;
+        return updatedColumn;
+      } catch (error) {
+        console.error("Error updating column:", error);
+        throw new Error("Failed to update column");
+      }
     },
 
-    // Resolver for moving cards
-    moveCard: (_, { boardId, source, destination }) => {
-      const board = mockBoards.find((b) => b.id === boardId);
-      if (!board) return null;
+    // Delete a column
+    deleteColumn: async (_, { columnId }, { user }) => {
+      try {
+        if (!user) {
+          throw new Error("Not authenticated");
+        }
 
-      const sourceColumn = board.columns.find((c) => c.id === source.columnId);
-      const destColumn = board.columns.find(
-        (c) => c.id === destination.columnId
-      );
+        // Find the board containing this column
+        const boardsRef = adminDb.collection("boards");
+        const querySnapshot = await boardsRef
+          .where("columns", "array-contains", { id: columnId })
+          .get();
 
-      if (!sourceColumn || !destColumn) return null;
+        if (querySnapshot.empty) {
+          throw new Error("Column not found");
+        }
 
-      // Moving within the same column or between columns
-      const [movedCard] = sourceColumn.cards.splice(source.index, 1);
-      movedCard.columnId = destination.columnId;
-      destColumn.cards.splice(destination.index, 0, movedCard);
+        const boardDoc = querySnapshot.docs[0];
+        const boardData = boardDoc.data();
+        if (!boardData) {
+          throw new Error("Board data is missing");
+        }
 
-      // Update order in source column
-      sourceColumn.cards.forEach((card, index) => {
-        card.order = index;
-      });
+        // Check if user is a member of this board
+        const isMember = boardData.members.some(
+          (member) => member.id === user.uid
+        );
 
-      // Update order in destination column
-      destColumn.cards.forEach((card, index) => {
-        card.order = index;
-      });
+        if (!isMember) {
+          throw new Error("Not authorized to delete columns from this board");
+        }
 
-      return board;
+        // Filter out the column to delete
+        const updatedColumns = boardData.columns.filter(
+          (col) => col.id !== columnId
+        );
+
+        // Update the board with the filtered columns array
+        await adminDb.collection("boards").doc(boardDoc.id).update({
+          columns: updatedColumns,
+          updatedAt: firestore.Timestamp.now(),
+        });
+
+        return {
+          id: boardDoc.id,
+          ...boardData,
+          columns: updatedColumns,
+        };
+      } catch (error) {
+        console.error("Error deleting column:", error);
+        throw new Error("Failed to delete column");
+      }
+    },
+
+    // Add a card to a column
+    addCard: async (_, { columnId, input }, { user }) => {
+      try {
+        if (!user) {
+          throw new Error("Not authenticated");
+        }
+
+        // Find the board containing this column
+        const boardsRef = adminDb.collection("boards");
+        const querySnapshot = await boardsRef.get();
+
+        let targetBoard = null;
+        let targetBoardId = null;
+        let columnIndex = -1;
+
+        // Manually search for the column in all boards
+        for (const doc of querySnapshot.docs) {
+          const boardData = doc.data();
+          if (!boardData || !boardData.columns) continue;
+
+          const colIndex = boardData.columns.findIndex(
+            (col) => col.id === columnId
+          );
+          if (colIndex !== -1) {
+            targetBoard = boardData;
+            targetBoardId = doc.id;
+            columnIndex = colIndex;
+            break;
+          }
+        }
+
+        if (!targetBoard || columnIndex === -1) {
+          throw new Error("Column not found");
+        }
+
+        // Check if user is a member of this board
+        const isMember = targetBoard.members.some(
+          (member) => member.id === user.uid
+        );
+
+        if (!isMember) {
+          throw new Error("Not authorized to add cards to this board");
+        }
+
+        // Create the new card
+        const newCard = {
+          id: firestore.Timestamp.now().toMillis().toString(), // Generate a unique ID
+          title: input.title,
+          description: input.description || "",
+          order: targetBoard.columns[columnIndex].cards.length,
+          columnId: columnId,
+          assignedTo: input.assignedTo || null,
+          dueDate: input.dueDate || null,
+          labels: input.labels || [],
+        };
+
+        // Add the card to the column
+        const updatedCards = [
+          ...targetBoard.columns[columnIndex].cards,
+          newCard,
+        ];
+
+        // Update the column with the new cards
+        const updatedColumns = [...targetBoard.columns];
+        updatedColumns[columnIndex] = {
+          ...updatedColumns[columnIndex],
+          cards: updatedCards,
+        };
+
+        // Update the board
+        await adminDb.collection("boards").doc(targetBoardId).update({
+          columns: updatedColumns,
+          updatedAt: firestore.Timestamp.now(),
+        });
+
+        return newCard;
+      } catch (error) {
+        console.error("Error adding card:", error);
+        throw new Error("Failed to add card");
+      }
+    },
+
+    // Update a card
+    updateCard: async (_, { cardId, input }, { user }) => {
+      try {
+        if (!user) {
+          throw new Error("Not authenticated");
+        }
+
+        // Find the board containing this card (search all boards)
+        const boardsRef = adminDb.collection("boards");
+        const querySnapshot = await boardsRef.get();
+
+        let targetBoard = null;
+        let targetBoardId = null;
+        let columnIndex = -1;
+        let cardIndex = -1;
+
+        // Manually search for the card in all boards
+        for (const doc of querySnapshot.docs) {
+          const boardData = doc.data();
+          if (!boardData || !boardData.columns) continue;
+
+          // Search each column for the card
+          for (let i = 0; i < boardData.columns.length; i++) {
+            const column = boardData.columns[i];
+            const cIndex = column.cards.findIndex((card) => card.id === cardId);
+
+            if (cIndex !== -1) {
+              targetBoard = boardData;
+              targetBoardId = doc.id;
+              columnIndex = i;
+              cardIndex = cIndex;
+              break;
+            }
+          }
+
+          if (targetBoard) break;
+        }
+
+        if (!targetBoard || columnIndex === -1 || cardIndex === -1) {
+          throw new Error("Card not found");
+        }
+
+        // Check if user is a member of this board
+        const isMember = targetBoard.members.some(
+          (member) => member.id === user.uid
+        );
+
+        if (!isMember) {
+          throw new Error("Not authorized to update cards on this board");
+        }
+
+        // Create updated card
+        const updatedCard = {
+          ...targetBoard.columns[columnIndex].cards[cardIndex],
+          ...input,
+        };
+
+        // Update the card in the column
+        const updatedCards = [...targetBoard.columns[columnIndex].cards];
+        updatedCards[cardIndex] = updatedCard;
+
+        // Update the column with the updated cards
+        const updatedColumns = [...targetBoard.columns];
+        updatedColumns[columnIndex] = {
+          ...updatedColumns[columnIndex],
+          cards: updatedCards,
+        };
+
+        // Update the board
+        await adminDb.collection("boards").doc(targetBoardId).update({
+          columns: updatedColumns,
+          updatedAt: firestore.Timestamp.now(),
+        });
+
+        return updatedCard;
+      } catch (error) {
+        console.error("Error updating card:", error);
+        throw new Error("Failed to update card");
+      }
+    },
+
+    // Delete a card
+    deleteCard: async (_, { cardId }, { user }) => {
+      try {
+        if (!user) {
+          throw new Error("Not authenticated");
+        }
+
+        // Find the board containing this card (search all boards)
+        const boardsRef = adminDb.collection("boards");
+        const querySnapshot = await boardsRef.get();
+
+        let targetBoard = null;
+        let targetBoardId = null;
+        let columnIndex = -1;
+        let cardToDelete = null;
+
+        // Manually search for the card in all boards
+        for (const doc of querySnapshot.docs) {
+          const boardData = doc.data();
+          if (!boardData || !boardData.columns) continue;
+
+          // Search each column for the card
+          for (let i = 0; i < boardData.columns.length; i++) {
+            const column = boardData.columns[i];
+            const cardIndex = column.cards.findIndex(
+              (card) => card.id === cardId
+            );
+
+            if (cardIndex !== -1) {
+              targetBoard = boardData;
+              targetBoardId = doc.id;
+              columnIndex = i;
+              cardToDelete = column.cards[cardIndex];
+              break;
+            }
+          }
+
+          if (targetBoard) break;
+        }
+
+        if (!targetBoard || columnIndex === -1 || !cardToDelete) {
+          throw new Error("Card not found");
+        }
+
+        // Check if user is a member of this board
+        const isMember = targetBoard.members.some(
+          (member) => member.id === user.uid
+        );
+
+        if (!isMember) {
+          throw new Error("Not authorized to delete cards on this board");
+        }
+
+        // Filter out the card to delete
+        const updatedCards = targetBoard.columns[columnIndex].cards.filter(
+          (card) => card.id !== cardId
+        );
+
+        // Update the column with the filtered cards
+        const updatedColumns = [...targetBoard.columns];
+        updatedColumns[columnIndex] = {
+          ...updatedColumns[columnIndex],
+          cards: updatedCards,
+        };
+
+        // Update the board
+        await adminDb.collection("boards").doc(targetBoardId).update({
+          columns: updatedColumns,
+          updatedAt: firestore.Timestamp.now(),
+        });
+
+        return true;
+      } catch (error) {
+        console.error("Error deleting card:", error);
+        throw new Error("Failed to delete card");
+      }
+    },
+
+    // Move a card between columns
+    moveCard: async (_, { boardId, source, destination }, { user }) => {
+      try {
+        if (!user) {
+          throw new Error("Not authenticated");
+        }
+
+        const boardRef = adminDb.collection("boards").doc(boardId);
+        const boardSnap = await boardRef.get();
+
+        if (!boardSnap.exists) {
+          throw new Error("Board not found");
+        }
+
+        // Check if user is a member of this board
+        const boardData = boardSnap.data();
+        if (!boardData) {
+          throw new Error("Board data is missing");
+        }
+
+        const isMember = boardData.members.some(
+          (member) => member.id === user.uid
+        );
+
+        if (!isMember) {
+          throw new Error("Not authorized to move cards on this board");
+        }
+
+        // Find source column
+        const sourceColumnIndex = boardData.columns.findIndex(
+          (col) => col.id === source.columnId
+        );
+
+        if (sourceColumnIndex === -1) {
+          throw new Error("Source column not found");
+        }
+
+        // Find destination column
+        const destColumnIndex = boardData.columns.findIndex(
+          (col) => col.id === destination.columnId
+        );
+
+        if (destColumnIndex === -1) {
+          throw new Error("Destination column not found");
+        }
+
+        // Get the card to move
+        const cardToMove =
+          boardData.columns[sourceColumnIndex].cards[source.index];
+        if (!cardToMove) {
+          throw new Error("Card not found at source index");
+        }
+
+        // Remove card from source column
+        const sourceCards = [...boardData.columns[sourceColumnIndex].cards];
+        sourceCards.splice(source.index, 1);
+
+        // Create updated source column
+        const updatedSourceColumn = {
+          ...boardData.columns[sourceColumnIndex],
+          cards: sourceCards,
+        };
+
+        // Add card to destination column at the specified index
+        const destCards = [...boardData.columns[destColumnIndex].cards];
+        destCards.splice(destination.index, 0, cardToMove);
+
+        // Create updated destination column
+        const updatedDestColumn = {
+          ...boardData.columns[destColumnIndex],
+          cards: destCards,
+        };
+
+        // Update the columns array
+        const updatedColumns = [...boardData.columns];
+        updatedColumns[sourceColumnIndex] = updatedSourceColumn;
+        updatedColumns[destColumnIndex] = updatedDestColumn;
+
+        // Update the board
+        await boardRef.update({
+          columns: updatedColumns,
+          updatedAt: firestore.Timestamp.now(),
+        });
+
+        return {
+          id: boardId,
+          ...boardData,
+          columns: updatedColumns,
+        };
+      } catch (error) {
+        console.error("Error moving card:", error);
+        throw new Error("Failed to move card");
+      }
+    },
+
+    // Invite a member to a board
+    inviteMember: async (_, { boardId, email }, { user }) => {
+      try {
+        if (!user) {
+          throw new Error("Not authenticated");
+        }
+
+        const boardRef = adminDb.collection("boards").doc(boardId);
+        const boardSnap = await boardRef.get();
+
+        if (!boardSnap.exists) {
+          throw new Error("Board not found");
+        }
+
+        // Check if user is an admin of this board
+        const boardData = boardSnap.data();
+        if (!boardData) {
+          throw new Error("Board data is missing");
+        }
+
+        const userMember = boardData.members.find(
+          (member) => member.id === user.uid
+        );
+
+        if (!userMember || userMember.role !== "ADMIN") {
+          throw new Error("Not authorized to invite members to this board");
+        }
+
+        // Check if email is already a member
+        const existingMember = boardData.members.find(
+          (member) => member.email === email
+        );
+
+        if (existingMember) {
+          throw new Error("User is already a member of this board");
+        }
+
+        // For simplicity, create a placeholder member
+        // In a real app, you might look up the user in your DB
+        const newMember = {
+          id: email.replace(/[^a-zA-Z0-9]/g, ""), // Generate an ID based on email
+          name: email.split("@")[0], // Use part of email as name
+          email: email,
+          avatar: null,
+          role: "MEMBER",
+        };
+
+        // Add the new member to the board
+        const updatedMembers = [...boardData.members, newMember];
+
+        await boardRef.update({
+          members: updatedMembers,
+          updatedAt: firestore.Timestamp.now(),
+        });
+
+        return {
+          id: boardId,
+          ...boardData,
+          members: updatedMembers,
+        };
+      } catch (error) {
+        console.error("Error inviting member:", error);
+        throw new Error("Failed to invite member");
+      }
+    },
+
+    // Remove a member from a board
+    removeMember: async (_, { boardId, memberId }, { user }) => {
+      try {
+        if (!user) {
+          throw new Error("Not authenticated");
+        }
+
+        const boardRef = adminDb.collection("boards").doc(boardId);
+        const boardSnap = await boardRef.get();
+
+        if (!boardSnap.exists) {
+          throw new Error("Board not found");
+        }
+
+        // Check if user is an admin of this board
+        const boardData = boardSnap.data();
+        if (!boardData) {
+          throw new Error("Board data is missing");
+        }
+
+        const userMember = boardData.members.find(
+          (member) => member.id === user.uid
+        );
+
+        if (!userMember || userMember.role !== "ADMIN") {
+          throw new Error("Not authorized to remove members from this board");
+        }
+
+        // Prevent removing yourself
+        if (memberId === user.uid) {
+          throw new Error("You cannot remove yourself from the board");
+        }
+
+        // Find the member to remove
+        const memberToRemove = boardData.members.find(
+          (member) => member.id === memberId
+        );
+
+        if (!memberToRemove) {
+          throw new Error("Member not found");
+        }
+
+        // Remove the member
+        const updatedMembers = boardData.members.filter(
+          (member) => member.id !== memberId
+        );
+
+        // Update the board
+        await boardRef.update({
+          members: updatedMembers,
+          updatedAt: firestore.Timestamp.now(),
+        });
+
+        return {
+          id: boardId,
+          ...boardData,
+          members: updatedMembers,
+        };
+      } catch (error) {
+        console.error("Error removing member:", error);
+        throw new Error("Failed to remove member");
+      }
     },
   },
 };
+
+export default resolvers;

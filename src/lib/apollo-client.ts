@@ -4,7 +4,10 @@ import {
   InMemoryCache,
   HttpLink,
   NormalizedCacheObject,
+  FetchPolicy,
+  WatchQueryFetchPolicy,
 } from "@apollo/client";
+import { getAuth } from "firebase/auth";
 
 // Specify the type for apolloClient
 let apolloClient: ApolloClient<NormalizedCacheObject> | undefined;
@@ -14,8 +17,60 @@ export function createApolloClient() {
     ssrMode: typeof window === "undefined", // True if on server
     link: new HttpLink({
       uri: process.env.NEXT_PUBLIC_GRAPHQL_ENDPOINT || "/api/graphql",
+      // Add auth token to requests
+      fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+        // Cast to avoid TypeScript errors
+        const options = init || {};
+
+        // Only run in browser
+        if (typeof window !== "undefined") {
+          const auth = getAuth();
+          const user = auth.currentUser;
+
+          if (user) {
+            // Get token and add to headers
+            return user.getIdToken().then((token) => {
+              options.headers = {
+                ...options.headers,
+                authorization: token ? `Bearer ${token}` : "",
+              };
+
+              return fetch(input, options);
+            });
+          }
+        }
+
+        return fetch(input, options);
+      },
     }),
-    cache: new InMemoryCache(),
+    cache: new InMemoryCache({
+      // Define type policies for complex caching behavior
+      typePolicies: {
+        Board: {
+          keyFields: ["id"],
+        },
+        Column: {
+          keyFields: ["id"],
+        },
+        Card: {
+          keyFields: ["id"],
+        },
+      },
+    }),
+    defaultOptions: {
+      query: {
+        fetchPolicy: "network-only" as FetchPolicy,
+      },
+      watchQuery: {
+        fetchPolicy: "cache-and-network" as WatchQueryFetchPolicy,
+      },
+      // For mutations, only specify the options we need
+      mutate: {
+        // Mutation fetch policies are more limited
+        // Valid options are: 'network-only' and 'no-cache'
+        errorPolicy: "all", // This is valid without specifying fetchPolicy
+      },
+    },
   });
 }
 

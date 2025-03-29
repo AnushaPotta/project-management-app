@@ -3,15 +3,33 @@ import { ApolloServer } from "@apollo/server";
 import { startServerAndCreateNextHandler } from "@as-integrations/next";
 import { typeDefs } from "@/graphql/schema";
 import { resolvers } from "@/graphql/resolvers";
+import { adminAuth } from "@/lib/firebase-admin";
+import { NextRequest } from "next/server";
 
-// Create Apollo Server
 const server = new ApolloServer({
   typeDefs,
   resolvers,
 });
 
-// Create handler for Next.js API route
-const handler = startServerAndCreateNextHandler(server);
+const handler = startServerAndCreateNextHandler(server, {
+  context: async (req: NextRequest) => {
+    let user = null;
 
-// Export the handler for GET and POST requests
+    // Correctly access headers with Next.js App Router
+    const authHeader = req.headers.get("authorization");
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.slice(7); // Remove "Bearer " prefix
+
+      try {
+        user = await adminAuth.verifyIdToken(token);
+      } catch (error) {
+        console.error("Error verifying auth token:", error);
+      }
+    }
+
+    return { user };
+  },
+});
+
 export { handler as GET, handler as POST };

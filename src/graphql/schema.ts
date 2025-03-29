@@ -1,7 +1,7 @@
 // src/graphql/schema.ts
 import { gql } from "graphql-tag";
 
-export const typeDefs = gql`
+export const typeDefs = `#graphql
   type User {
     id: ID!
     name: String
@@ -86,6 +86,8 @@ export const typeDefs = gql`
   type Mutation {
     createBoard(input: CreateBoardInput!): Board
     updateBoard(id: ID!, input: BoardUpdateInput!): Board
+    deleteBoard(id: ID!): Boolean
+
     inviteMember(boardId: ID!, email: String!): Board
     removeMember(boardId: ID!, memberId: ID!): Board
 
