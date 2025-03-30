@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Box,
   Button,
@@ -20,8 +20,17 @@ import { useQuery, useMutation } from "@apollo/client";
 import { GET_USER_BOARDS, CREATE_BOARD } from "@/graphql/board";
 import { Board } from "@/types/board";
 
+interface CreateBoardInput {
+  title: string;
+  description?: string;
+}
+
+interface CreateBoardResult {
+  createBoard: Board;
+}
+
 export default function BoardsPage() {
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
   const toast = useToast();
 
   const bgColor = useColorModeValue("white", "gray.800");
@@ -34,29 +43,39 @@ export default function BoardsPage() {
     loading: isLoading,
     error: queryError,
     refetch,
-  } = useQuery(GET_USER_BOARDS);
+  } = useQuery<{ boards: Board[] }>(GET_USER_BOARDS);
 
-  // GraphQL mutation to create a board
-  const [createBoardMutation, { loading: isCreating }] =
-    useMutation(CREATE_BOARD);
+  // GraphQL mutation to create a board with proper cache update
+  const [createBoardMutation, { loading: isCreating }] = useMutation<
+    CreateBoardResult,
+    { input: CreateBoardInput }
+  >(CREATE_BOARD, {
+    update(cache, { data }) {
+      if (!data) return;
 
-  // Extract boards from the GraphQL response
-  const boards: Board[] = data?.boards || [];
+      try {
+        // Read the current cache
+        const existingData = cache.readQuery<{ boards: Board[] }>({
+          query: GET_USER_BOARDS,
+        });
 
-  const handleCreateBoard = async (boardData: {
-    title: string;
-    description?: string;
-  }) => {
-    try {
-      const { data } = await createBoardMutation({
-        variables: {
-          input: boardData,
-        },
-      });
-
-      refetch(); // Refetch boards list
+        // Write back to the cache with the new board included
+        cache.writeQuery({
+          query: GET_USER_BOARDS,
+          data: {
+            boards: existingData?.boards
+              ? [...existingData.boards, data.createBoard]
+              : [data.createBoard],
+          },
+        });
+      } catch (error) {
+        console.error("Error updating cache:", error);
+        // If cache update fails, fallback to refetch
+        refetch();
+      }
+    },
+    onCompleted: () => {
       setIsCreateModalOpen(false);
-
       toast({
         title: "Board created",
         description: "Your new board has been created successfully",
@@ -64,9 +83,9 @@ export default function BoardsPage() {
         duration: 3000,
         isClosable: true,
       });
-    } catch (err) {
+    },
+    onError: (err) => {
       console.error("Failed to create board:", err);
-
       toast({
         title: "Error",
         description: "Failed to create board. Please try again.",
@@ -74,6 +93,23 @@ export default function BoardsPage() {
         duration: 5000,
         isClosable: true,
       });
+    },
+  });
+
+  // Extract boards from the GraphQL response
+  const boards: Board[] = data?.boards || [];
+
+  const handleCreateBoard = async (boardData: CreateBoardInput) => {
+    try {
+      await createBoardMutation({
+        variables: {
+          input: boardData,
+        },
+      });
+      // The onCompleted and onError callbacks will handle the rest
+    } catch (err) {
+      // This catch is for unexpected errors that might not be caught by onError
+      console.error("Unexpected error creating board:", err);
     }
   };
 
