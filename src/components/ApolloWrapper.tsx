@@ -1,33 +1,95 @@
-// src/components/ApolloWrapper.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import {
-  ApolloProvider,
   ApolloClient,
-  NormalizedCacheObject,
+  InMemoryCache,
+  ApolloProvider,
+  HttpLink,
+  from,
 } from "@apollo/client";
-import { getApolloClient } from "@/lib/apollo-client";
+import { setContext } from "@apollo/client/link/context";
+import { onError } from "@apollo/client/link/error";
+import { getAuth } from "firebase/auth";
 
-export default function ApolloWrapper({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const [client, setClient] =
-    useState<ApolloClient<NormalizedCacheObject> | null>(null);
+// Create a component that handles client-side only rendering
+export function ApolloWrapper({ children }: { children: React.ReactNode }) {
+  const [client, setClient] = useState<ApolloClient<any> | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    async function initClient() {
-      const apolloClient = await getApolloClient();
-      setClient(apolloClient);
-    }
+    // Set mounted to true when component mounts on client
+    setMounted(true);
 
-    initClient();
+    // Create Apollo Client on the client side only
+    const httpLink = new HttpLink({
+      uri: process.env.NEXT_PUBLIC_GRAPHQL_ENDPOINT || "/api/graphql",
+    });
+
+    const authLink = setContext(async (_, { headers }) => {
+      // Get the authentication token if it exists
+      const auth = getAuth();
+      let token = "";
+
+      if (auth.currentUser) {
+        try {
+          token = await auth.currentUser.getIdToken();
+        } catch (error) {
+          console.error("Error getting token:", error);
+        }
+      }
+
+      return {
+        headers: {
+          ...headers,
+          authorization: token ? `Bearer ${token}` : "",
+        },
+      };
+    });
+
+    const errorLink = onError(({ graphQLErrors, networkError }) => {
+      if (graphQLErrors)
+        graphQLErrors.forEach(({ message, locations, path }) =>
+          console.error(
+            `[GraphQL error]: Message: ${message}, Location: ${locations}, Path: ${path}`
+          )
+        );
+      if (networkError) console.error(`[Network error]: ${networkError}`);
+    });
+
+    const client = new ApolloClient({
+      link: from([errorLink, authLink, httpLink]),
+      cache: new InMemoryCache({
+        typePolicies: {
+          Query: {
+            fields: {
+              boards: {
+                merge(existing, incoming) {
+                  return incoming;
+                },
+              },
+            },
+          },
+        },
+      }),
+      defaultOptions: {
+        watchQuery: {
+          fetchPolicy: "cache-and-network",
+        },
+      },
+    });
+
+    setClient(client);
   }, []);
 
+  // Fix hydration mismatch by not rendering anything on the server
+  // and waiting until we're mounted on the client
+  if (!mounted) {
+    return null;
+  }
+
+  // Once mounted on client with initialized Apollo client
   if (!client) {
-    // Simple loading state - replace with your preferred loading UI
     return <div>Loading Apollo Client...</div>;
   }
 

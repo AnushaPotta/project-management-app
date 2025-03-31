@@ -4,17 +4,24 @@ import { firestore } from "firebase-admin";
 
 export const resolvers = {
   Query: {
-    // Get all boards for the current user
+    // Get all boards for the current user - FIXED QUERY
     boards: async (_, __, { user }) => {
       try {
         if (!user) {
           throw new Error("Not authenticated");
         }
 
+        console.log("Fetching boards for user:", user.uid);
+
+        // Better approach: query on memberIds field
         const boardsRef = adminDb.collection("boards");
         const snapshot = await boardsRef
-          .where("members", "array-contains", { id: user.uid })
+          .where("memberIds", "array-contains", user.uid)
           .get();
+
+        console.log(
+          `Found ${snapshot.docs.length} boards for user ${user.uid}`
+        );
 
         return snapshot.docs.map((doc) => ({
           id: doc.id,
@@ -46,11 +53,8 @@ export const resolvers = {
           throw new Error("Board data is missing");
         }
 
-        const isMember = boardData.members.some(
-          (member) => member.id === user.uid
-        );
-
-        if (!isMember) {
+        // Check if user is in memberIds array
+        if (!boardData.memberIds || !boardData.memberIds.includes(user.uid)) {
           throw new Error("Not authorized to view this board");
         }
 
@@ -66,7 +70,7 @@ export const resolvers = {
   },
 
   Mutation: {
-    // Create a new board
+    // Create a new board - UPDATED TO INCLUDE memberIds
     createBoard: async (_, { input }, { user }) => {
       try {
         if (!user) {
@@ -82,7 +86,7 @@ export const resolvers = {
           role: "ADMIN",
         };
 
-        // Create board data
+        // Create board data with memberIds array
         const boardData = {
           title: input.title,
           description: input.description || "",
@@ -91,6 +95,7 @@ export const resolvers = {
           createdAt: firestore.Timestamp.now(),
           updatedAt: firestore.Timestamp.now(),
           members: [currentUser],
+          memberIds: [user.uid], // Add this line with memberIds array
           columns: [],
         };
 
@@ -125,6 +130,11 @@ export const resolvers = {
         const boardData = boardSnap.data();
         if (!boardData) {
           throw new Error("Board data is missing");
+        }
+
+        // Check memberIds first (more reliable)
+        if (!boardData.memberIds || !boardData.memberIds.includes(user.uid)) {
+          throw new Error("Not authorized to update this board");
         }
 
         const userMember = boardData.members.find(
@@ -173,6 +183,11 @@ export const resolvers = {
           throw new Error("Board data is missing");
         }
 
+        // Check memberIds first (more reliable)
+        if (!boardData.memberIds || !boardData.memberIds.includes(user.uid)) {
+          throw new Error("Not authorized to delete this board");
+        }
+
         const userMember = boardData.members.find(
           (member) => member.id === user.uid
         );
@@ -210,11 +225,8 @@ export const resolvers = {
           throw new Error("Board data is missing");
         }
 
-        const isMember = boardData.members.some(
-          (member) => member.id === user.uid
-        );
-
-        if (!isMember) {
+        // Check memberIds first (more reliable)
+        if (!boardData.memberIds || !boardData.memberIds.includes(user.uid)) {
           throw new Error("Not authorized to add columns to this board");
         }
 
@@ -254,30 +266,37 @@ export const resolvers = {
         // Find the board containing this column
         const boardsRef = adminDb.collection("boards");
         const querySnapshot = await boardsRef
-          .where("columns", "array-contains", { id: columnId })
+          .where("memberIds", "array-contains", user.uid)
           .get();
 
         if (querySnapshot.empty) {
+          throw new Error("Column not found or not authorized");
+        }
+
+        let foundBoard = null;
+        let foundBoardId = null;
+
+        // Find the board with this column
+        for (const doc of querySnapshot.docs) {
+          const boardData = doc.data();
+          if (!boardData || !boardData.columns) continue;
+
+          const hasColumn = boardData.columns.some(
+            (col) => col.id === columnId
+          );
+          if (hasColumn) {
+            foundBoard = boardData;
+            foundBoardId = doc.id;
+            break;
+          }
+        }
+
+        if (!foundBoard) {
           throw new Error("Column not found");
         }
 
-        const boardDoc = querySnapshot.docs[0];
-        const boardData = boardDoc.data();
-        if (!boardData) {
-          throw new Error("Board data is missing");
-        }
-
-        // Check if user is a member of this board
-        const isMember = boardData.members.some(
-          (member) => member.id === user.uid
-        );
-
-        if (!isMember) {
-          throw new Error("Not authorized to update columns on this board");
-        }
-
         // Find the column to update
-        const columnIndex = boardData.columns.findIndex(
+        const columnIndex = foundBoard.columns.findIndex(
           (col) => col.id === columnId
         );
 
@@ -287,16 +306,16 @@ export const resolvers = {
 
         // Create updated column data
         const updatedColumn = {
-          ...boardData.columns[columnIndex],
+          ...foundBoard.columns[columnIndex],
           ...input,
         };
 
         // Create a new columns array with the updated column
-        const updatedColumns = [...boardData.columns];
+        const updatedColumns = [...foundBoard.columns];
         updatedColumns[columnIndex] = updatedColumn;
 
         // Update the board with the new columns array
-        await adminDb.collection("boards").doc(boardDoc.id).update({
+        await adminDb.collection("boards").doc(foundBoardId).update({
           columns: updatedColumns,
           updatedAt: firestore.Timestamp.now(),
         });
@@ -315,45 +334,52 @@ export const resolvers = {
           throw new Error("Not authenticated");
         }
 
-        // Find the board containing this column
+        // Find the board containing this column using memberIds
         const boardsRef = adminDb.collection("boards");
         const querySnapshot = await boardsRef
-          .where("columns", "array-contains", { id: columnId })
+          .where("memberIds", "array-contains", user.uid)
           .get();
 
         if (querySnapshot.empty) {
+          throw new Error("Column not found or not authorized");
+        }
+
+        let foundBoard = null;
+        let foundBoardId = null;
+
+        // Find the board with this column
+        for (const doc of querySnapshot.docs) {
+          const boardData = doc.data();
+          if (!boardData || !boardData.columns) continue;
+
+          const hasColumn = boardData.columns.some(
+            (col) => col.id === columnId
+          );
+          if (hasColumn) {
+            foundBoard = boardData;
+            foundBoardId = doc.id;
+            break;
+          }
+        }
+
+        if (!foundBoard) {
           throw new Error("Column not found");
         }
 
-        const boardDoc = querySnapshot.docs[0];
-        const boardData = boardDoc.data();
-        if (!boardData) {
-          throw new Error("Board data is missing");
-        }
-
-        // Check if user is a member of this board
-        const isMember = boardData.members.some(
-          (member) => member.id === user.uid
-        );
-
-        if (!isMember) {
-          throw new Error("Not authorized to delete columns from this board");
-        }
-
         // Filter out the column to delete
-        const updatedColumns = boardData.columns.filter(
+        const updatedColumns = foundBoard.columns.filter(
           (col) => col.id !== columnId
         );
 
         // Update the board with the filtered columns array
-        await adminDb.collection("boards").doc(boardDoc.id).update({
+        await adminDb.collection("boards").doc(foundBoardId).update({
           columns: updatedColumns,
           updatedAt: firestore.Timestamp.now(),
         });
 
         return {
-          id: boardDoc.id,
-          ...boardData,
+          id: foundBoardId,
+          ...foundBoard,
           columns: updatedColumns,
         };
       } catch (error) {
@@ -369,15 +395,17 @@ export const resolvers = {
           throw new Error("Not authenticated");
         }
 
-        // Find the board containing this column
+        // Find boards where user is a member using memberIds
         const boardsRef = adminDb.collection("boards");
-        const querySnapshot = await boardsRef.get();
+        const querySnapshot = await boardsRef
+          .where("memberIds", "array-contains", user.uid)
+          .get();
 
         let targetBoard = null;
         let targetBoardId = null;
         let columnIndex = -1;
 
-        // Manually search for the column in all boards
+        // Manually search for the column in user's boards
         for (const doc of querySnapshot.docs) {
           const boardData = doc.data();
           if (!boardData || !boardData.columns) continue;
@@ -395,15 +423,6 @@ export const resolvers = {
 
         if (!targetBoard || columnIndex === -1) {
           throw new Error("Column not found");
-        }
-
-        // Check if user is a member of this board
-        const isMember = targetBoard.members.some(
-          (member) => member.id === user.uid
-        );
-
-        if (!isMember) {
-          throw new Error("Not authorized to add cards to this board");
         }
 
         // Create the new card
@@ -451,16 +470,18 @@ export const resolvers = {
           throw new Error("Not authenticated");
         }
 
-        // Find the board containing this card (search all boards)
+        // Find boards where user is a member using memberIds
         const boardsRef = adminDb.collection("boards");
-        const querySnapshot = await boardsRef.get();
+        const querySnapshot = await boardsRef
+          .where("memberIds", "array-contains", user.uid)
+          .get();
 
         let targetBoard = null;
         let targetBoardId = null;
         let columnIndex = -1;
         let cardIndex = -1;
 
-        // Manually search for the card in all boards
+        // Manually search for the card in user's boards
         for (const doc of querySnapshot.docs) {
           const boardData = doc.data();
           if (!boardData || !boardData.columns) continue;
@@ -484,15 +505,6 @@ export const resolvers = {
 
         if (!targetBoard || columnIndex === -1 || cardIndex === -1) {
           throw new Error("Card not found");
-        }
-
-        // Check if user is a member of this board
-        const isMember = targetBoard.members.some(
-          (member) => member.id === user.uid
-        );
-
-        if (!isMember) {
-          throw new Error("Not authorized to update cards on this board");
         }
 
         // Create updated card
@@ -532,16 +544,18 @@ export const resolvers = {
           throw new Error("Not authenticated");
         }
 
-        // Find the board containing this card (search all boards)
+        // Find boards where user is a member using memberIds
         const boardsRef = adminDb.collection("boards");
-        const querySnapshot = await boardsRef.get();
+        const querySnapshot = await boardsRef
+          .where("memberIds", "array-contains", user.uid)
+          .get();
 
         let targetBoard = null;
         let targetBoardId = null;
         let columnIndex = -1;
         let cardToDelete = null;
 
-        // Manually search for the card in all boards
+        // Manually search for the card in user's boards
         for (const doc of querySnapshot.docs) {
           const boardData = doc.data();
           if (!boardData || !boardData.columns) continue;
@@ -567,15 +581,6 @@ export const resolvers = {
 
         if (!targetBoard || columnIndex === -1 || !cardToDelete) {
           throw new Error("Card not found");
-        }
-
-        // Check if user is a member of this board
-        const isMember = targetBoard.members.some(
-          (member) => member.id === user.uid
-        );
-
-        if (!isMember) {
-          throw new Error("Not authorized to delete cards on this board");
         }
 
         // Filter out the card to delete
@@ -623,11 +628,8 @@ export const resolvers = {
           throw new Error("Board data is missing");
         }
 
-        const isMember = boardData.members.some(
-          (member) => member.id === user.uid
-        );
-
-        if (!isMember) {
+        // Check memberIds first (more reliable)
+        if (!boardData.memberIds || !boardData.memberIds.includes(user.uid)) {
           throw new Error("Not authorized to move cards on this board");
         }
 
@@ -698,7 +700,7 @@ export const resolvers = {
       }
     },
 
-    // Invite a member to a board
+    // Invite a member to a board - UPDATED to manage memberIds
     inviteMember: async (_, { boardId, email }, { user }) => {
       try {
         if (!user) {
@@ -716,6 +718,11 @@ export const resolvers = {
         const boardData = boardSnap.data();
         if (!boardData) {
           throw new Error("Board data is missing");
+        }
+
+        // Check memberIds first (more reliable)
+        if (!boardData.memberIds || !boardData.memberIds.includes(user.uid)) {
+          throw new Error("Not authorized to invite members to this board");
         }
 
         const userMember = boardData.members.find(
@@ -737,8 +744,9 @@ export const resolvers = {
 
         // For simplicity, create a placeholder member
         // In a real app, you might look up the user in your DB
+        const newMemberId = email.replace(/[^a-zA-Z0-9]/g, ""); // Generate an ID based on email
         const newMember = {
-          id: email.replace(/[^a-zA-Z0-9]/g, ""), // Generate an ID based on email
+          id: newMemberId,
           name: email.split("@")[0], // Use part of email as name
           email: email,
           avatar: null,
@@ -748,8 +756,14 @@ export const resolvers = {
         // Add the new member to the board
         const updatedMembers = [...boardData.members, newMember];
 
+        // Add new member ID to memberIds array
+        const updatedMemberIds = boardData.memberIds
+          ? [...boardData.memberIds, newMemberId]
+          : [user.uid, newMemberId]; // Include current user if memberIds doesn't exist yet
+
         await boardRef.update({
           members: updatedMembers,
+          memberIds: updatedMemberIds, // Update memberIds array
           updatedAt: firestore.Timestamp.now(),
         });
 
@@ -757,6 +771,7 @@ export const resolvers = {
           id: boardId,
           ...boardData,
           members: updatedMembers,
+          memberIds: updatedMemberIds,
         };
       } catch (error) {
         console.error("Error inviting member:", error);
@@ -764,7 +779,7 @@ export const resolvers = {
       }
     },
 
-    // Remove a member from a board
+    // Remove a member from a board - UPDATED to manage memberIds
     removeMember: async (_, { boardId, memberId }, { user }) => {
       try {
         if (!user) {
@@ -782,6 +797,11 @@ export const resolvers = {
         const boardData = boardSnap.data();
         if (!boardData) {
           throw new Error("Board data is missing");
+        }
+
+        // Check memberIds first (more reliable)
+        if (!boardData.memberIds || !boardData.memberIds.includes(user.uid)) {
+          throw new Error("Not authorized to remove members from this board");
         }
 
         const userMember = boardData.members.find(
@@ -806,14 +826,20 @@ export const resolvers = {
           throw new Error("Member not found");
         }
 
-        // Remove the member
+        // Remove the member from members array
         const updatedMembers = boardData.members.filter(
           (member) => member.id !== memberId
         );
 
+        // Remove the member from memberIds array
+        const updatedMemberIds = boardData.memberIds
+          ? boardData.memberIds.filter((id) => id !== memberId)
+          : [user.uid]; // Fallback if memberIds doesn't exist yet
+
         // Update the board
         await boardRef.update({
           members: updatedMembers,
+          memberIds: updatedMemberIds, // Update memberIds array
           updatedAt: firestore.Timestamp.now(),
         });
 
@@ -821,6 +847,7 @@ export const resolvers = {
           id: boardId,
           ...boardData,
           members: updatedMembers,
+          memberIds: updatedMemberIds,
         };
       } catch (error) {
         console.error("Error removing member:", error);

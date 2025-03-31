@@ -12,13 +12,15 @@ import {
   Flex,
   Icon,
   useColorModeValue,
+  HStack,
 } from "@chakra-ui/react";
-import { FiPlus, FiAlertCircle } from "react-icons/fi";
+import { FiPlus, FiAlertCircle, FiRefreshCw } from "react-icons/fi";
 import Link from "next/link";
 import { CreateBoardModal } from "@/components/board/CreateBoardModal";
 import { useQuery, useMutation } from "@apollo/client";
 import { GET_USER_BOARDS, CREATE_BOARD } from "@/graphql/board";
 import { Board } from "@/types/board";
+import { getAuth } from "firebase/auth";
 
 interface CreateBoardInput {
   title: string;
@@ -31,26 +33,77 @@ interface CreateBoardResult {
 
 export default function BoardsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const toast = useToast();
 
   const bgColor = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.700");
   const hoverBgColor = useColorModeValue("gray.50", "gray.700");
 
-  // GraphQL query to fetch all boards
+  // GraphQL query to fetch all boards with improved fetch policies
   const {
     data,
     loading: isLoading,
     error: queryError,
     refetch,
-  } = useQuery<{ boards: Board[] }>(GET_USER_BOARDS);
+  } = useQuery<{ boards: Board[] }>(GET_USER_BOARDS, {
+    fetchPolicy: "cache-first", // First use cache
+    nextFetchPolicy: "cache-and-network", // Then network
+    notifyOnNetworkStatusChange: true,
+  });
 
+  // Smarter useEffect with auth awareness
   useEffect(() => {
-    // This ensures we're always getting fresh data on component mount
-    refetch();
+    const auth = getAuth();
+
+    // Only refetch when we have a logged-in user
+    if (auth.currentUser) {
+      console.log("User authenticated, refetching boards");
+
+      // Add a small delay to ensure auth token is ready
+      const timer = setTimeout(() => {
+        refetch()
+          .then((result) => {
+            console.log(
+              "Refetch complete, boards count:",
+              result.data?.boards?.length || 0
+            );
+            setIsInitialLoad(false);
+          })
+          .catch((error) => {
+            console.error("Refetch error:", error);
+            setIsInitialLoad(false);
+          });
+      }, 500);
+
+      return () => clearTimeout(timer);
+    } else {
+      console.log("No authenticated user yet, waiting for auth");
+      const unsubscribe = auth.onAuthStateChanged((user) => {
+        if (user) {
+          console.log("User authenticated in listener, refetching boards");
+          refetch()
+            .then((result) => {
+              console.log(
+                "Refetch complete, boards count:",
+                result.data?.boards?.length || 0
+              );
+              setIsInitialLoad(false);
+            })
+            .catch((error) => {
+              console.error("Refetch error:", error);
+              setIsInitialLoad(false);
+            });
+        } else {
+          setIsInitialLoad(false);
+        }
+      });
+
+      return () => unsubscribe();
+    }
   }, [refetch]);
 
-  // GraphQL mutation to create a board with proper cache update
+  // GraphQL mutation to create a board with improved cache handling
   const [createBoardMutation, { loading: isCreating }] = useMutation<
     CreateBoardResult,
     { input: CreateBoardInput }
@@ -64,6 +117,11 @@ export default function BoardsPage() {
           query: GET_USER_BOARDS,
         });
 
+        console.log(
+          "Existing boards in cache:",
+          existingData?.boards?.length || 0
+        );
+
         // Write back to the cache with the new board included
         cache.writeQuery({
           query: GET_USER_BOARDS,
@@ -73,6 +131,8 @@ export default function BoardsPage() {
               : [data.createBoard],
           },
         });
+
+        console.log("Updated cache with new board");
       } catch (error) {
         console.error("Error updating cache:", error);
         // If cache update fails, fallback to refetch
@@ -115,6 +175,30 @@ export default function BoardsPage() {
     } catch (err) {
       // This catch is for unexpected errors that might not be caught by onError
       console.error("Unexpected error creating board:", err);
+    }
+  };
+
+  // Manual refresh function for the debug button
+  const handleManualRefresh = async () => {
+    try {
+      console.log("Manual refresh - Current auth:", getAuth().currentUser?.uid);
+      console.log("Current cache data:", data?.boards?.length || 0, "boards");
+
+      const result = await refetch();
+      console.log(
+        "Manual refresh result:",
+        result.data?.boards?.length || 0,
+        "boards"
+      );
+
+      toast({
+        title: "Boards refreshed",
+        description: `Found ${result.data?.boards?.length || 0} boards`,
+        status: "info",
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error("Manual refresh error:", error);
     }
   };
 
@@ -225,7 +309,7 @@ export default function BoardsPage() {
   };
 
   const renderContent = () => {
-    if (isLoading) {
+    if (isLoading && isInitialLoad) {
       return (
         <Flex direction="column" align="center" justify="center" py={10}>
           <Spinner size="xl" mb={4} />
@@ -257,14 +341,25 @@ export default function BoardsPage() {
         gap={{ base: 4, sm: 0 }}
       >
         <Heading size="lg">Your Boards</Heading>
-        <Button
-          leftIcon={<FiPlus />}
-          colorScheme="blue"
-          onClick={() => setIsCreateModalOpen(true)}
-          width={{ base: "full", sm: "auto" }}
-        >
-          Create Board
-        </Button>
+        <HStack spacing={2}>
+          <Button
+            leftIcon={<FiRefreshCw />}
+            size="sm"
+            colorScheme="teal"
+            onClick={handleManualRefresh}
+            isLoading={isLoading && !isInitialLoad}
+          >
+            Refresh
+          </Button>
+          <Button
+            leftIcon={<FiPlus />}
+            colorScheme="blue"
+            onClick={() => setIsCreateModalOpen(true)}
+            width={{ base: "full", sm: "auto" }}
+          >
+            Create Board
+          </Button>
+        </HStack>
       </Flex>
 
       {renderContent()}
