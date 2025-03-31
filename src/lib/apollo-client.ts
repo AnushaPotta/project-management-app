@@ -8,96 +8,90 @@ import {
   WatchQueryFetchPolicy,
 } from "@apollo/client";
 import { getAuth } from "firebase/auth";
+import { persistCache, LocalStorageWrapper } from "apollo3-cache-persist";
 
-// Specify the type for apolloClient
-let apolloClient: ApolloClient<NormalizedCacheObject> | undefined;
+// Will hold our client instance after initialization
+let apolloClient: ApolloClient<NormalizedCacheObject> | null = null;
 
-export function createApolloClient() {
+async function createApolloClient() {
+  // Create cache with your existing configuration
+  const cache = new InMemoryCache({
+    typePolicies: {
+      Board: { keyFields: ["id"] },
+      Column: { keyFields: ["id"] },
+      Card: { keyFields: ["id"] },
+    },
+  });
+
+  // Set up cache persistence (only in browser)
+  if (typeof window !== "undefined") {
+    try {
+      await persistCache({
+        cache,
+        storage: new LocalStorageWrapper(window.localStorage),
+        maxSize: 1048576 * 5, // 5MB
+      });
+      console.log("Apollo cache persistence initialized");
+    } catch (error) {
+      console.error("Error initializing cache persistence:", error);
+    }
+  }
+
   return new ApolloClient({
-    ssrMode: typeof window === "undefined", // True if on server
+    ssrMode: typeof window === "undefined",
     link: new HttpLink({
       uri: process.env.NEXT_PUBLIC_GRAPHQL_ENDPOINT || "/api/graphql",
-      // Add auth token to requests
-      fetch: (input: RequestInfo | URL, init?: RequestInit) => {
-        // Cast to avoid TypeScript errors
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
         const options = init || {};
 
-        // Only run in browser
         if (typeof window !== "undefined") {
           const auth = getAuth();
           const user = auth.currentUser;
 
           if (user) {
-            // Get token and add to headers
-            return user.getIdToken().then((token) => {
+            try {
+              const token = await user.getIdToken();
               options.headers = {
                 ...options.headers,
                 authorization: token ? `Bearer ${token}` : "",
               };
-
-              return fetch(input, options);
-            });
+            } catch (error) {
+              console.error("Failed to get auth token:", error);
+            }
           }
         }
 
         return fetch(input, options);
       },
     }),
-    cache: new InMemoryCache({
-      // Define type policies for complex caching behavior
-      typePolicies: {
-        Board: {
-          keyFields: ["id"],
-        },
-        Column: {
-          keyFields: ["id"],
-        },
-        Card: {
-          keyFields: ["id"],
-        },
-      },
-    }),
+    cache,
     defaultOptions: {
       query: {
-        fetchPolicy: "network-only" as FetchPolicy,
+        fetchPolicy: "cache-and-network" as FetchPolicy,
       },
       watchQuery: {
         fetchPolicy: "cache-and-network" as WatchQueryFetchPolicy,
+        nextFetchPolicy: "cache-first",
       },
-      // For mutations, only specify the options we need
       mutate: {
-        // Mutation fetch policies are more limited
-        // Valid options are: 'network-only' and 'no-cache'
-        errorPolicy: "all", // This is valid without specifying fetchPolicy
+        errorPolicy: "all",
       },
     },
   });
 }
 
-export function initializeApollo(initialState = null) {
-  const _apolloClient = apolloClient ?? createApolloClient();
-
-  // If your page has Next.js data fetching methods that use Apollo Client,
-  // the initial state gets hydrated here
-  if (initialState) {
-    // Get existing cache, loaded during client side data fetching
-    const existingCache = _apolloClient.extract();
-
-    // Restore the cache using the data passed from
-    // getStaticProps/getServerSideProps combined with the existing cached data
-    _apolloClient.cache.restore({
-      ...existingCache,
-      ...(initialState as NormalizedCacheObject),
-    });
+// Returns a promise that resolves to the Apollo client
+export async function getApolloClient() {
+  if (!apolloClient) {
+    apolloClient = await createApolloClient();
   }
-
-  // For SSG and SSR always create a new Apollo Client
-  if (typeof window === "undefined") return _apolloClient;
-
-  // Create the Apollo Client once in the client
-  if (!apolloClient) apolloClient = _apolloClient;
-  return _apolloClient;
+  return apolloClient;
 }
 
-// Export a singleton instance for client-side usage
-export const client = initializeApollo();
+// Reset function if needed (e.g., for logout)
+export function resetApolloClient() {
+  apolloClient = null;
+}
+
+// We'll no longer export a synchronous client
+// Remove or comment out: export const client = initializeApollo();

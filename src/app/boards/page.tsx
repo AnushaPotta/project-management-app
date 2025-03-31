@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Box,
   Button,
@@ -44,6 +44,11 @@ export default function BoardsPage() {
     error: queryError,
     refetch,
   } = useQuery<{ boards: Board[] }>(GET_USER_BOARDS);
+
+  useEffect(() => {
+    // This ensures we're always getting fresh data on component mount
+    refetch();
+  }, [refetch]);
 
   // GraphQL mutation to create a board with proper cache update
   const [createBoardMutation, { loading: isCreating }] = useMutation<
