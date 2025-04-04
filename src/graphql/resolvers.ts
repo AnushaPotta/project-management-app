@@ -2,6 +2,33 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { firestore } from "firebase-admin";
 
+// Add this helper function to the top of your resolvers.ts file:
+const formatTimestamp = (timestamp) => {
+  try {
+    // If it's a Firestore Timestamp with toDate method
+    if (
+      timestamp &&
+      typeof timestamp === "object" &&
+      typeof timestamp.toDate === "function"
+    ) {
+      return timestamp.toDate().toISOString();
+    }
+    // If it's already a string, return it
+    if (typeof timestamp === "string") {
+      return timestamp;
+    }
+    // If it's a Date object
+    if (timestamp instanceof Date) {
+      return timestamp.toISOString();
+    }
+    // If all else fails, return current date
+    return new Date().toISOString();
+  } catch (error) {
+    console.log("Error formatting timestamp:", error);
+    return new Date().toISOString(); // Safe fallback
+  }
+};
+
 export const resolvers = {
   Query: {
     // Get all boards for the current user - FIXED QUERY
@@ -248,6 +275,8 @@ export const resolvers = {
         return {
           id: boardId,
           ...boardData,
+          createdAt: formatTimestamp(boardData.createdAt),
+          updatedAt: formatTimestamp(boardData.updatedAt),
           columns: updatedColumns,
         };
       } catch (error) {
@@ -450,13 +479,22 @@ export const resolvers = {
           cards: updatedCards,
         };
 
+        const now = firestore.Timestamp.now();
+
         // Update the board
         await adminDb.collection("boards").doc(targetBoardId).update({
           columns: updatedColumns,
-          updatedAt: firestore.Timestamp.now(),
+          updatedAt: now,
         });
 
-        return newCard;
+        // Change to return the updated board with formatted timestamps
+        return {
+          id: targetBoardId,
+          ...targetBoard,
+          columns: updatedColumns,
+          createdAt: formatTimestamp(targetBoard.createdAt),
+          updatedAt: formatTimestamp(now),
+        };
       } catch (error) {
         console.error("Error adding card:", error);
         throw new Error("Failed to add card");

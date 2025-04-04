@@ -269,7 +269,7 @@ export default function Column({
                 transition="background-color 0.2s ease"
               >
                 {Array.isArray(column.cards) &&
-                  column.cards
+                  [...column.cards] // Create a copy with spread operator
                     .sort((a, b) => a.order - b.order)
                     .map((card, cardIndex) => (
                       <Card
