@@ -19,3 +19,33 @@ export interface UpdateBoardInput {
   background?: string;
   isStarred?: boolean;
 }
+
+// Add these to your existing graphql/types.ts file
+
+export interface TaskStats {
+  total: number;
+  todo: number;
+  inProgress: number;
+  completed: number;
+}
+
+export interface ActivityItem {
+  id: string;
+  type: string;
+  boardId: string;
+  boardTitle: string;
+  userId: string;
+  userName: string;
+  timestamp: string;
+  description: string;
+}
+
+export interface DeadlineCard {
+  id: string;
+  title: string;
+  dueDate: string;
+  boardId: string;
+  boardTitle: string;
+  columnId: string;
+  columnTitle: string;
+}

@@ -1,59 +1,52 @@
+// components/dashboard/TaskSummary.tsx
+import { useQuery } from "@apollo/client";
+import { GET_TASK_STATS } from "@/graphql/dashboard";
 import {
   Box,
-  Heading,
   Stat,
   StatLabel,
   StatNumber,
-  SimpleGrid,
-  useColorModeValue,
+  StatGroup,
+  Skeleton,
 } from "@chakra-ui/react";
 
-// Define the Task interface
-interface Task {
-  id: string | number;
-  title: string;
-  status: string;
-  // Add other task properties as needed
-}
+export default function TaskSummary() {
+  const { data, loading } = useQuery(GET_TASK_STATS);
 
-// Update the component props to use the Task interface
-interface TaskSummaryProps {
-  tasks?: Task[];
-}
+  if (loading) {
+    return <Skeleton height="100px" />;
+  }
 
-export default function TaskSummary({ tasks = [] }: TaskSummaryProps) {
-  const bgColor = useColorModeValue("white", "gray.700");
-
-  // Calculate stats (replace with actual data)
-  const totalTasks = tasks.length || 15;
-  const completedTasks = tasks.filter((t) => t?.status === "done")?.length || 7;
-  const inProgressTasks =
-    tasks.filter((t) => t?.status === "in-progress")?.length || 5;
-  const upcomingTasks = tasks.filter((t) => t?.status === "to-do")?.length || 3;
+  const stats = data?.taskStats || {
+    total: 0,
+    todo: 0,
+    inProgress: 0,
+    completed: 0,
+  };
 
   return (
-    <Box p={5} borderRadius="lg" bg={bgColor} boxShadow="sm" borderWidth="1px">
-      <Heading size="md" mb={4}>
-        Task Summary
-      </Heading>
-      <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4}>
+    <Box p={5} shadow="md" borderWidth="1px" borderRadius="md">
+      <StatGroup>
         <Stat>
           <StatLabel>Total Tasks</StatLabel>
-          <StatNumber>{totalTasks}</StatNumber>
+          <StatNumber>{stats.total}</StatNumber>
         </Stat>
+
         <Stat>
-          <StatLabel>Completed</StatLabel>
-          <StatNumber>{completedTasks}</StatNumber>
+          <StatLabel>To Do</StatLabel>
+          <StatNumber>{stats.todo}</StatNumber>
         </Stat>
+
         <Stat>
           <StatLabel>In Progress</StatLabel>
-          <StatNumber>{inProgressTasks}</StatNumber>
+          <StatNumber>{stats.inProgress}</StatNumber>
         </Stat>
+
         <Stat>
-          <StatLabel>Upcoming</StatLabel>
-          <StatNumber>{upcomingTasks}</StatNumber>
+          <StatLabel>Completed</StatLabel>
+          <StatNumber>{stats.completed}</StatNumber>
         </Stat>
-      </SimpleGrid>
+      </StatGroup>
     </Box>
   );
 }

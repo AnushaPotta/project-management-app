@@ -32,11 +32,10 @@ export interface Card {
   description?: string;
   order: number;
   columnId: string;
-  assignedTo?: string[];
-  dueDate?: string;
+  dueDate?: string; // ISO string format
+  assignedTo?: string;
   labels?: string[];
 }
-
 export interface DragItem {
   id: string;
   columnId: string;
