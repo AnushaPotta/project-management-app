@@ -129,6 +129,19 @@ export const ADD_COLUMN = gql`
   mutation AddColumn($boardId: ID!, $title: String!) {
     addColumn(boardId: $boardId, title: $title) {
       id
+      title
+      description
+      background
+      isStarred
+      createdAt
+      updatedAt
+      members {
+        id
+        name
+        email
+        avatar
+        role
+      }
       columns {
         id
         title
@@ -139,6 +152,9 @@ export const ADD_COLUMN = gql`
           description
           order
           columnId
+          assignedTo
+          dueDate
+          labels
         }
       }
     }
@@ -194,6 +210,19 @@ export const ADD_CARD = gql`
   mutation AddCard($columnId: ID!, $input: CardInput!) {
     addCard(columnId: $columnId, input: $input) {
       id
+      title
+      description
+      background
+      isStarred
+      createdAt
+      updatedAt
+      members {
+        id
+        name
+        email
+        avatar
+        role
+      }
       columns {
         id
         title
@@ -250,13 +279,32 @@ export const MOVE_CARD = gql`
   ) {
     moveCard(boardId: $boardId, source: $source, destination: $destination) {
       id
+      title
+      description
+      background
+      isStarred
+      createdAt
+      updatedAt
+      members {
+        id
+        name
+        email
+        avatar
+        role
+      }
       columns {
         id
+        title
+        order
         cards {
           id
           title
+          description
           order
           columnId
+          assignedTo
+          dueDate
+          labels
         }
       }
     }

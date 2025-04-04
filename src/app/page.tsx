@@ -1,4 +1,3 @@
-// src/app/page.tsx
 "use client";
 
 import {
@@ -19,7 +18,6 @@ import { IconType } from "react-icons";
 import { useAuth } from "@/contexts/auth-context";
 import AuthenticatedLayout from "@/components/AuthenticatedLayout";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 
 // Feature component with proper typing
 interface FeatureProps {
@@ -29,11 +27,14 @@ interface FeatureProps {
 }
 
 const Feature = ({ icon, title, description }: FeatureProps) => {
+  const bgColor = useColorModeValue("white", "gray.700");
+  const textColor = useColorModeValue("gray.600", "gray.300");
+
   return (
     <VStack
       align="flex-start"
       p={6}
-      bg={useColorModeValue("white", "gray.700")}
+      bg={bgColor}
       rounded="lg"
       shadow="md"
       transition="all 0.3s"
@@ -43,9 +44,7 @@ const Feature = ({ icon, title, description }: FeatureProps) => {
       <Text fontWeight="bold" fontSize="lg">
         {title}
       </Text>
-      <Text color={useColorModeValue("gray.600", "gray.300")}>
-        {description}
-      </Text>
+      <Text color={textColor}>{description}</Text>
     </VStack>
   );
 };
@@ -78,19 +77,6 @@ const features: FeatureProps[] = [
 ];
 
 export default function Home() {
-  // const router = useRouter();
-  const [isClient, setIsClient] = useState(false);
-
-  // Use this to safely access useAuth only on the client side
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  // Only render the authenticated content on the client side
-  if (!isClient) {
-    return null;
-  }
-
   return (
     <AuthenticatedLayout>
       <HomeContent />
@@ -98,10 +84,11 @@ export default function Home() {
   );
 }
 
-// Separate the content to ensure useAuth is only called after AuthProvider is mounted
 function HomeContent() {
   const { user } = useAuth();
   const router = useRouter();
+  const ctaBgColor = useColorModeValue("blue.500", "blue.600");
+  const sectionBgColor = useColorModeValue("gray.50", "gray.800");
 
   const handleGetStarted = () => {
     if (user) {
@@ -163,7 +150,7 @@ function HomeContent() {
       </Container>
 
       {/* Features Section */}
-      <Box bg={useColorModeValue("gray.50", "gray.800")} py={20}>
+      <Box bg={sectionBgColor} py={20}>
         <Container maxW="container.xl">
           <VStack spacing={12}>
             <VStack spacing={4} textAlign="center">
@@ -203,7 +190,7 @@ function HomeContent() {
             direction={{ base: "column", md: "row" }}
             align="center"
             justify="space-between"
-            bg="blue.500"
+            bg={ctaBgColor}
             p={10}
             rounded="2xl"
             color="white"

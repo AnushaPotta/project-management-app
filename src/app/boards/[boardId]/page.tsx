@@ -93,12 +93,13 @@ export default function BoardPage() {
       const [movedColumn] = newColumns.splice(source.index, 1);
       newColumns.splice(destination.index, 0, movedColumn);
 
-      // Update column orders
-      newColumns.forEach((column, index) => {
-        column.order = index;
-      });
+      // Update column orders immutably
+      const updatedColumns = newColumns.map((column, index) => ({
+        ...column,
+        order: index,
+      }));
 
-      newBoard.columns = newColumns;
+      newBoard.columns = updatedColumns;
       setBoard(newBoard);
 
       try {
@@ -136,12 +137,13 @@ export default function BoardPage() {
       const [movedCard] = newCards.splice(source.index, 1);
       newCards.splice(destination.index, 0, movedCard);
 
-      // Update card orders
-      newCards.forEach((card, index) => {
-        card.order = index;
-      });
+      // Update card orders immutably
+      const updatedCards = newCards.map((card, index) => ({
+        ...card,
+        order: index,
+      }));
 
-      sourceColumn.cards = newCards;
+      sourceColumn.cards = updatedCards;
     }
     // Moving from one column to another
     else {
@@ -149,22 +151,27 @@ export default function BoardPage() {
       const [movedCard] = sourceCards.splice(source.index, 1);
       const destCards = Array.from(destColumn.cards);
 
-      // Update the card's column ID
-      movedCard.columnId = destColumn.id;
+      // Create a new card with ALL properties preserved plus the updated columnId
+      const updatedMovedCard = {
+        ...movedCard, // This preserves ALL card properties (title, description, etc.)
+        columnId: destColumn.id,
+      };
 
-      destCards.splice(destination.index, 0, movedCard);
+      destCards.splice(destination.index, 0, updatedMovedCard);
 
-      // Update card orders in both columns
-      sourceCards.forEach((card, index) => {
-        card.order = index;
-      });
+      // When updating order, make sure to preserve ALL card properties
+      const updatedSourceCards = sourceCards.map((card, index) => ({
+        ...card, // Keep all existing properties
+        order: index,
+      }));
 
-      destCards.forEach((card, index) => {
-        card.order = index;
-      });
+      const updatedDestCards = destCards.map((card, index) => ({
+        ...card, // Keep all existing properties
+        order: index,
+      }));
 
-      sourceColumn.cards = sourceCards;
-      destColumn.cards = destCards;
+      sourceColumn.cards = updatedSourceCards;
+      destColumn.cards = updatedDestCards;
     }
 
     setBoard(newBoard);
@@ -174,11 +181,11 @@ export default function BoardPage() {
         variables: {
           boardId: board.id,
           source: {
-            droppableId: source.droppableId,
+            columnId: source.droppableId, // CHANGED FROM droppableId TO columnId
             index: source.index,
           },
           destination: {
-            droppableId: destination.droppableId,
+            columnId: destination.droppableId, // CHANGED FROM droppableId TO columnId
             index: destination.index,
           },
         },
