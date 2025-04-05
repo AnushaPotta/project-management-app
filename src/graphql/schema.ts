@@ -83,6 +83,43 @@ export const typeDefs = `#graphql
     board(id: ID!): Board
   }
 
+  # Add these new types
+type TaskStats {
+  total: Int!
+  todo: Int!
+  inProgress: Int!
+  completed: Int!
+}
+
+type ActivityItem {
+  id: ID!
+  type: String!
+  boardId: String!
+  boardTitle: String!
+  userId: String!
+  userName: String!
+  timestamp: String!
+  description: String!
+}
+
+type DeadlineCard {
+  id: ID!
+  title: String!
+  dueDate: String!
+  boardId: String!
+  boardTitle: String!
+  columnId: String!
+  columnTitle: String!
+}
+
+extend type Query {
+  taskStats: TaskStats!
+  recentActivity(limit: Int): [ActivityItem!]!
+  upcomingDeadlines(days: Int): [DeadlineCard!]!
+}
+
+
+
   type Mutation {
     createBoard(input: CreateBoardInput!): Board
     updateBoard(id: ID!, input: BoardUpdateInput!): Board

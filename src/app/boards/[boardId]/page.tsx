@@ -335,6 +335,7 @@ export default function BoardPage() {
                       column={column}
                       index={index}
                       boardId={board.id}
+                      board={board}
                       onBoardChange={(updatedBoard) => setBoard(updatedBoard)}
                     />
                   ))}

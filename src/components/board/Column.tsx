@@ -30,6 +30,7 @@ interface ColumnProps {
   column: ColumnType;
   index: number;
   boardId: string;
+  board: Board;
   onBoardChange: (board: Board) => void;
 }
 
@@ -37,6 +38,7 @@ export default function Column({
   column,
   index,
   boardId,
+  board,
   onBoardChange,
 }: ColumnProps) {
   const [isAddingCard, setIsAddingCard] = useState(false);
@@ -179,6 +181,48 @@ export default function Column({
     }
   };
 
+  const handleCardUpdate = (updatedCard) => {
+    // Find and update the specific card within this column
+    const updatedCards = column.cards.map((card) =>
+      card.id === updatedCard.id ? updatedCard : card
+    );
+
+    // Create updated column with new cards array
+    const updatedColumn = {
+      ...column,
+      cards: updatedCards,
+    };
+
+    // Pass this change up to the board level
+    onBoardChange({
+      ...board,
+      columns: board.columns.map((col) =>
+        col.id === column.id ? updatedColumn : col
+      ),
+    });
+  };
+
+  // Add this function in your Column component
+  const handleDeleteCard = (cardId: string) => {
+    // Remove the card from this column's cards array
+    const updatedCards = column.cards.filter((card) => card.id !== cardId);
+
+    // Create an updated column with the card removed
+    const updatedColumn = {
+      ...column,
+      cards: updatedCards,
+    };
+
+    const updatedBoard = {
+      ...board,
+      columns: board.columns.map((col) =>
+        col.id === column.id ? updatedColumn : col
+      ),
+    };
+
+    onBoardChange(updatedBoard);
+  };
+
   return (
     <Draggable draggableId={column.id} index={index}>
       {(provided) => (
@@ -278,7 +322,8 @@ export default function Column({
                         index={cardIndex}
                         columnId={column.id}
                         boardId={boardId}
-                        onBoardChange={onBoardChange}
+                        onCardUpdate={handleCardUpdate}
+                        onCardDelete={handleDeleteCard}
                       />
                     ))}
                 {provided.placeholder}

@@ -16,4 +16,17 @@ if (!admin.apps.length) {
 const adminAuth = admin.auth();
 const adminDb = admin.firestore();
 
+adminDb
+  .collection("test")
+  .doc("connection-test")
+  .set({
+    timestamp: Date.now(),
+  })
+  .then(() => {
+    console.log("Firestore connection verified successfully");
+  })
+  .catch((error) => {
+    console.error("Firestore connection error:", error);
+  });
+
 export { admin, adminAuth, adminDb };

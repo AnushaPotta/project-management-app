@@ -3,6 +3,17 @@ import { adminDb } from "@/lib/firebase-admin";
 import { firestore } from "firebase-admin";
 import { logActivity } from "@/utils/activity";
 
+interface Context {
+  user: any; // Replace with actual user type
+}
+
+interface RecentActivityArgs {
+  limit?: number;
+}
+
+interface UpcomingDeadlinesArgs {
+  days?: number;
+}
 
 // Add this helper function to the top of your resolvers.ts file:
 const formatTimestamp = (timestamp) => {
@@ -95,6 +106,145 @@ export const resolvers = {
         console.error("Error fetching board:", error);
         throw new Error("Failed to fetch board");
       }
+    },
+
+    // ===== NEW DASHBOARD RESOLVERS ADDED HERE =====
+    // Task statistics query
+    taskStats: async (_: any, __: any, { user }: Context) => {
+      if (!user) throw new Error("Not authenticated");
+
+      const boardsRef = adminDb.collection("boards");
+      const snapshot = await boardsRef
+        .where("memberIds", "array-contains", user.uid)
+        .get();
+
+      let total = 0;
+      let todo = 0;
+      let inProgress = 0;
+      let completed = 0;
+
+      // Count cards in each category
+      snapshot.docs.forEach((doc) => {
+        const board = doc.data();
+        board.columns.forEach((column) => {
+          const lowerTitle = column.title.toLowerCase();
+
+          // Count cards in each column
+          if (Array.isArray(column.cards)) {
+            const cardCount = column.cards.length;
+            total += cardCount;
+
+            // Categorize based on column name
+            if (
+              lowerTitle.includes("todo") ||
+              lowerTitle.includes("to do") ||
+              lowerTitle.includes("backlog")
+            ) {
+              todo += cardCount;
+            } else if (
+              lowerTitle.includes("done") ||
+              lowerTitle.includes("complete")
+            ) {
+              completed += cardCount;
+            } else if (
+              lowerTitle.includes("progress") ||
+              lowerTitle.includes("doing")
+            ) {
+              inProgress += cardCount;
+            } else {
+              // Default to in-progress for other columns
+              inProgress += cardCount;
+            }
+          }
+        });
+      });
+
+      return {
+        total,
+        todo,
+        inProgress,
+        completed,
+      };
+    },
+
+    // Recent activity query
+    recentActivity: async (
+      _: any,
+      { limit = 10 }: RecentActivityArgs,
+      { user }: Context
+    ) => {
+      if (!user) throw new Error("Not authenticated");
+
+      const activitiesRef = adminDb.collection("activities");
+      const snapshot = await activitiesRef
+        .where("userId", "==", user.uid)
+        .orderBy("timestamp", "desc")
+        .limit(limit)
+        .get();
+
+      return snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          timestamp: formatTimestamp(data.timestamp),
+        };
+      });
+    },
+
+    // Upcoming deadlines query
+    upcomingDeadlines: async (
+      _: any,
+      { days = 7 }: UpcomingDeadlinesArgs,
+      { user }: Context
+    ) => {
+      if (!user) throw new Error("Not authenticated");
+
+      // Calculate the date range
+      const now = new Date();
+      const future = new Date();
+      future.setDate(future.getDate() + days);
+
+      const boardsRef = adminDb.collection("boards");
+      const snapshot = await boardsRef
+        .where("memberIds", "array-contains", user.uid)
+        .get();
+
+      const deadlines = [];
+
+      // Find cards with due dates
+      snapshot.docs.forEach((doc) => {
+        const board = doc.data();
+        const boardId = doc.id;
+
+        board.columns.forEach((column) => {
+          if (Array.isArray(column.cards)) {
+            column.cards.forEach((card) => {
+              if (card.dueDate) {
+                const dueDate = new Date(card.dueDate);
+
+                // Check if due date is within range
+                if (dueDate >= now && dueDate <= future) {
+                  deadlines.push({
+                    id: card.id,
+                    title: card.title,
+                    dueDate: card.dueDate,
+                    boardId: boardId,
+                    boardTitle: board.title,
+                    columnId: column.id,
+                    columnTitle: column.title,
+                  });
+                }
+              }
+            });
+          }
+        });
+      });
+
+      // Sort by due date (nearest first)
+      return deadlines.sort(
+        (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+      );
     },
   },
 
@@ -488,14 +638,15 @@ export const resolvers = {
           columns: updatedColumns,
           updatedAt: now,
         });
+
         await logActivity(
-      user.uid,
-      user.displayName || "User",
-      "ADD_CARD",
-      targetBoardId,
-      targetBoard.title,
-      `Added card "${input.title}" to column "${targetBoard.columns[columnIndex].title}"`
-    );
+          user.uid,
+          user.displayName || "User",
+          "ADD_CARD",
+          targetBoardId,
+          targetBoard.title,
+          `Added card "${input.title}" to column "${targetBoard.columns[columnIndex].title}"`
+        );
 
         // Change to return the updated board with formatted timestamps
         return {
@@ -643,13 +794,26 @@ export const resolvers = {
           cards: updatedCards,
         };
 
+        if (!targetBoardId) {
+          throw new Error("Board ID not found");
+        }
+
         // Update the board
         await adminDb.collection("boards").doc(targetBoardId).update({
           columns: updatedColumns,
           updatedAt: firestore.Timestamp.now(),
         });
 
-        return true;
+        const updatedBoardDoc = await adminDb
+          .collection("boards")
+          .doc(targetBoardId)
+          .get();
+        const updatedBoardData = updatedBoardDoc.data();
+
+        return {
+          id: targetBoardId, // This fixes "Cannot return null for non-nullable field Board.id"
+          ...updatedBoardData,
+        };
       } catch (error) {
         console.error("Error deleting card:", error);
         throw new Error("Failed to delete card");
@@ -904,126 +1068,5 @@ export const resolvers = {
     },
   },
 };
-
-// Task statistics query
-taskStats: async (_, __, { user }) => {
-  if (!user) throw new Error("Not authenticated");
-
-  const boardsRef = adminDb.collection("boards");
-  const snapshot = await boardsRef
-    .where("memberIds", "array-contains", user.uid)
-    .get();
-
-  let total = 0;
-  let todo = 0;
-  let inProgress = 0;
-  let completed = 0;
-
-  // Count cards in each category
-  snapshot.docs.forEach(doc => {
-    const board = doc.data();
-    board.columns.forEach(column => {
-      const lowerTitle = column.title.toLowerCase();
-
-      // Count cards in each column
-      if (Array.isArray(column.cards)) {
-        const cardCount = column.cards.length;
-        total += cardCount;
-
-        // Categorize based on column name
-        if (lowerTitle.includes('todo') || lowerTitle.includes('to do') || lowerTitle.includes('backlog')) {
-          todo += cardCount;
-        } else if (lowerTitle.includes('done') || lowerTitle.includes('complete')) {
-          completed += cardCount;
-        } else if (lowerTitle.includes('progress') || lowerTitle.includes('doing')) {
-          inProgress += cardCount;
-        } else {
-          // Default to in-progress for other columns
-          inProgress += cardCount;
-        }
-      }
-    });
-  });
-
-  return {
-    total,
-    todo,
-    inProgress,
-    completed
-  };
-},
-
-// Recent activity query
-recentActivity: async (_, { limit = 10 }, { user }) => {
-  if (!user) throw new Error("Not authenticated");
-
-  const activitiesRef = adminDb.collection("activities");
-  const snapshot = await activitiesRef
-    .where("userId", "==", user.uid)
-    .orderBy("timestamp", "desc")
-    .limit(limit)
-    .get();
-
-  return snapshot.docs.map(doc => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      ...data,
-      timestamp: formatTimestamp(data.timestamp)
-    };
-  });
-},
-
-// Upcoming deadlines query
-upcomingDeadlines: async (_, { days = 7 }, { user }) => {
-  if (!user) throw new Error("Not authenticated");
-
-  // Calculate the date range
-  const now = new Date();
-  const future = new Date();
-  future.setDate(future.getDate() + days);
-
-  const boardsRef = adminDb.collection("boards");
-  const snapshot = await boardsRef
-    .where("memberIds", "array-contains", user.uid)
-    .get();
-
-  const deadlines = [];
-
-  // Find cards with due dates
-  snapshot.docs.forEach(doc => {
-    const board = doc.data();
-    const boardId = doc.id;
-
-    board.columns.forEach(column => {
-      if (Array.isArray(column.cards)) {
-        column.cards.forEach(card => {
-          if (card.dueDate) {
-            const dueDate = new Date(card.dueDate);
-
-            // Check if due date is within range
-            if (dueDate >= now && dueDate <= future) {
-              deadlines.push({
-                id: card.id,
-                title: card.title,
-                dueDate: card.dueDate,
-                boardId: boardId,
-                boardTitle: board.title,
-                columnId: column.id,
-                columnTitle: column.title
-              });
-            }
-          }
-        });
-      }
-    });
-  });
-
-  // Sort by due date (nearest first)
-  return deadlines.sort((a, b) => 
-    new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
-  );
-}
-
 
 export default resolvers;
