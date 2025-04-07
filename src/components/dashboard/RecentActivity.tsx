@@ -1,94 +1,95 @@
+// components/dashboard/RecentActivity.tsx
+import { useQuery } from "@apollo/client";
 import {
   Box,
   Heading,
   VStack,
   Text,
   Flex,
-  Avatar,
-  useColorModeValue,
+  Badge,
+  Spinner,
+  Icon,
 } from "@chakra-ui/react";
-import { FiClock } from "react-icons/fi";
-
-// Sample activity item component
-const ActivityItem = ({ user, action, target, time }) => {
-  return (
-    <Flex py={2} alignItems="center">
-      <Avatar size="sm" name={user.name} src={user.avatar} mr={3} />
-      <Box flex="1">
-        <Text fontSize="sm">
-          <Text as="span" fontWeight="bold">
-            {user.name}
-          </Text>{" "}
-          {action}{" "}
-          <Text as="span" fontWeight="medium">
-            {target}
-          </Text>
-        </Text>
-        <Flex alignItems="center" mt={1} color="gray.500">
-          <FiClock size={12} />
-          <Text fontSize="xs" ml={1}>
-            {time}
-          </Text>
-        </Flex>
-      </Box>
-    </Flex>
-  );
-};
+import { GET_RECENT_ACTIVITY } from "@/graphql/dashboard"; // Adjust path if needed
+import { formatDistanceToNow } from "date-fns";
+import { FiActivity, FiAlertCircle } from "react-icons/fi";
 
 export default function RecentActivity() {
-  const bgColor = useColorModeValue("white", "gray.700");
+  const { data, loading, error } = useQuery(GET_RECENT_ACTIVITY, {
+    variables: { limit: 10 },
+    pollInterval: 60000, // Optional: refresh every minute
+  });
 
-  // Sample data - replace with actual data
-  const activities = [
-    {
-      id: 1,
-      user: { name: "Jane Cooper", avatar: "" },
-      action: "completed task",
-      target: "Update homepage design",
-      time: "10 minutes ago",
-    },
-    {
-      id: 2,
-      user: { name: "Alex Morgan", avatar: "" },
-      action: "commented on",
-      target: "API integration issue",
-      time: "1 hour ago",
-    },
-    {
-      id: 3,
-      user: { name: "Taylor Swift", avatar: "" },
-      action: "created a new board",
-      target: "Marketing Campaign 2025",
-      time: "3 hours ago",
-    },
-    {
-      id: 4,
-      user: { name: "Robert Chen", avatar: "" },
-      action: "moved task",
-      target: "Update documentation",
-      time: "Yesterday at 4:30 PM",
-    },
-  ];
+  // Loading state
+  if (loading) {
+    return (
+      <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg">
+        <Heading size="md" mb={4}>
+          Recent Activity
+        </Heading>
+        <Flex justify="center" align="center" h="200px">
+          <Spinner size="xl" />
+        </Flex>
+      </Box>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg">
+        <Heading size="md" mb={4}>
+          Recent Activity
+        </Heading>
+        <Flex direction="column" align="center" justify="center" h="200px">
+          <Icon as={FiAlertCircle} w={10} h={10} color="red.500" mb={3} />
+          <Text>Failed to load recent activities</Text>
+        </Flex>
+      </Box>
+    );
+  }
+
+  // Empty state
+  if (!data?.recentActivity || data.recentActivity.length === 0) {
+    return (
+      <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg">
+        <Heading size="md" mb={4}>
+          Recent Activity
+        </Heading>
+        <Flex direction="column" align="center" justify="center" h="200px">
+          <Text color="gray.500">No recent activity to show</Text>
+        </Flex>
+      </Box>
+    );
+  }
 
   return (
-    <Box
-      p={5}
-      borderRadius="lg"
-      bg={bgColor}
-      boxShadow="sm"
-      borderWidth="1px"
-      h="100%"
-    >
+    <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg">
       <Heading size="md" mb={4}>
         Recent Activity
       </Heading>
-      <VStack
-        spacing={3}
-        align="stretch"
-        divider={<Box borderBottomWidth="1px" />}
-      >
-        {activities.map((activity) => (
-          <ActivityItem key={activity.id} {...activity} />
+      <VStack spacing={4} align="stretch" maxH="400px" overflowY="auto">
+        {data.recentActivity.map((activity) => (
+          <Box key={activity.id} p={3} borderWidth="1px" borderRadius="md">
+            <Flex justify="space-between" align="center">
+              <Flex align="center">
+                <Icon as={FiActivity} mr={2} />
+                <Text fontWeight="medium">{activity.userName}</Text>
+              </Flex>
+              <Text fontSize="sm" color="gray.500">
+                {formatDistanceToNow(new Date(activity.timestamp), {
+                  addSuffix: true,
+                })}
+              </Text>
+            </Flex>
+            <Text mt={1}>{activity.description}</Text>
+            <Flex mt={2}>
+              <Badge colorScheme="blue" mr={2}>
+                {activity.boardTitle}
+              </Badge>
+              <Badge colorScheme="purple">{activity.type}</Badge>
+            </Flex>
+          </Box>
         ))}
       </VStack>
     </Box>

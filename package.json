@@ -23,6 +23,7 @@
     "@emotion/styled": "^11.14.0",
     "@hello-pangea/dnd": "^18.0.1",
     "apollo3-cache-persist": "^0.15.0",
+    "date-fns": "^4.1.0",
     "firebase": "^11.4.0",
     "firebase-admin": "^13.2.0",
     "framer-motion": "^12.4.10",
