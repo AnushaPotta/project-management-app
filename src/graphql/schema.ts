@@ -83,7 +83,6 @@ export const typeDefs = `#graphql
     board(id: ID!): Board
   }
 
-  # Add these new types
 type TaskStats {
   total: Int!
   todo: Int!
@@ -114,7 +113,7 @@ type DeadlineCard {
 
 extend type Query {
   taskStats: TaskStats!
-  recentActivity(limit: Int): [ActivityItem!]!
+  recentActivity(limit: Int, cursor: String): [ActivityItem!]!
   upcomingDeadlines(days: Int): [DeadlineCard!]!
 }
 

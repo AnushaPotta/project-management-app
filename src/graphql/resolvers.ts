@@ -168,19 +168,34 @@ export const resolvers = {
     },
 
     // Recent activity query
+    // In your resolvers.ts file
     recentActivity: async (
       _: any,
-      { limit = 10 }: RecentActivityArgs,
+      { limit = 10, cursor }: { limit?: number; cursor?: string },
       { user }: Context
     ) => {
       if (!user) throw new Error("Not authenticated");
 
-      const activitiesRef = adminDb.collection("activities");
-      const snapshot = await activitiesRef
+      let query = adminDb
+        .collection("activities")
         .where("userId", "==", user.uid)
-        .orderBy("timestamp", "desc")
-        .limit(limit)
-        .get();
+        .orderBy("timestamp", "desc");
+
+      // If we have a cursor, start after that document
+      if (cursor) {
+        // Get the document to use as cursor
+        const cursorDocRef = adminDb.collection("activities").doc(cursor);
+        const cursorDoc = await cursorDocRef.get();
+
+        if (cursorDoc.exists) {
+          query = query.startAfter(cursorDoc);
+        }
+      }
+
+      // Apply the limit
+      query = query.limit(limit);
+
+      const snapshot = await query.get();
 
       return snapshot.docs.map((doc) => {
         const data = doc.data();

@@ -1,6 +1,6 @@
-// pages/activities.tsx
-
+// src/app/activities/page.tsx
 "use client";
+
 import { useQuery } from "@apollo/client";
 import {
   Box,
@@ -13,12 +13,18 @@ import {
   Spinner,
   Icon,
   Button,
+  Divider,
 } from "@chakra-ui/react";
 import { GET_RECENT_ACTIVITY } from "@/graphql/dashboard";
 import { formatDistanceToNow } from "date-fns";
-import { FiActivity, FiAlertCircle, FiArrowLeft } from "react-icons/fi";
+import {
+  FiActivity,
+  FiAlertCircle,
+  FiArrowLeft,
+  FiChevronRight,
+} from "react-icons/fi";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 export default function ActivitiesPage() {
   const router = useRouter();
@@ -29,14 +35,36 @@ export default function ActivitiesPage() {
     variables: { limit: PAGE_SIZE },
   });
 
+  // Create a unique list of activities by ID to prevent duplicate rendering
+  const uniqueActivities = useMemo(() => {
+    if (!data?.recentActivity) return [];
+
+    // Use Map to preserve order but eliminate duplicates
+    const uniqueMap = new Map();
+    data.recentActivity.forEach((activity) => {
+      // Only keep the first occurrence of each ID
+      if (!uniqueMap.has(activity.id)) {
+        uniqueMap.set(activity.id, activity);
+      }
+    });
+
+    return Array.from(uniqueMap.values());
+  }, [data?.recentActivity]);
+
   const loadMore = () => {
+    if (uniqueActivities.length === 0) return;
+
+    // Get the ID of the last item to use as cursor
+    const lastActivityId = uniqueActivities[uniqueActivities.length - 1].id;
+
     fetchMore({
       variables: {
         limit: PAGE_SIZE,
-        offset: page * PAGE_SIZE,
+        cursor: lastActivityId,
       },
       updateQuery: (prev, { fetchMoreResult }) => {
         if (!fetchMoreResult) return prev;
+
         return {
           recentActivity: [
             ...prev.recentActivity,
@@ -71,12 +99,17 @@ export default function ActivitiesPage() {
           <Icon as={FiAlertCircle} w={10} h={10} color="red.500" mb={3} />
           <Text>Failed to load activities</Text>
         </Box>
+      ) : uniqueActivities.length === 0 ? (
+        <Box textAlign="center" py={10} bg="gray.50" borderRadius="md">
+          <Icon as={FiActivity} w={10} h={10} color="gray.400" mb={3} />
+          <Text fontSize="lg">No activity found</Text>
+        </Box>
       ) : (
         <>
           <VStack spacing={4} align="stretch">
-            {data?.recentActivity.map((activity) => (
+            {uniqueActivities.map((activity, index) => (
               <Box
-                key={activity.id}
+                key={`activity-${activity.id}-${index}`}
                 p={4}
                 borderWidth="1px"
                 borderRadius="md"
@@ -110,12 +143,19 @@ export default function ActivitiesPage() {
             ))}
           </VStack>
 
-          {data?.recentActivity?.length > 0 && (
+          {uniqueActivities.length > 0 && (
             <Flex justify="center" mt={8}>
               <Button
                 onClick={loadMore}
                 isLoading={loading}
                 loadingText="Loading"
+                size="lg"
+                w="200px"
+                colorScheme="blue"
+                isDisabled={
+                  loading ||
+                  (data?.recentActivity?.length < PAGE_SIZE && page > 1)
+                }
               >
                 Load More
               </Button>

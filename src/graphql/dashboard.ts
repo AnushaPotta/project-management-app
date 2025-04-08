@@ -12,15 +12,16 @@ export const GET_TASK_STATS = gql`
 `;
 
 export const GET_RECENT_ACTIVITY = gql`
-  query GetRecentActivity($limit: Int) {
-    recentActivity(limit: $limit) {
+  query GetRecentActivity($limit: Int, $cursor: String) {
+    recentActivity(limit: $limit, cursor: $cursor) {
       id
       type
       boardId
       boardTitle
+      userId
+      userName
       timestamp
       description
-      userName
     }
   }
 `;
