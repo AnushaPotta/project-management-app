@@ -1,5 +1,5 @@
 // components/dashboard/UpcomingDeadlines.tsx
-import { useQuery } from "@apollo/client";
+import { useQuery, useMutation } from "@apollo/client";
 import {
   Box,
   Heading,
@@ -10,16 +10,40 @@ import {
   Spinner,
   Icon,
   Progress,
+  Button,
+  Divider,
 } from "@chakra-ui/react";
 import { GET_UPCOMING_DEADLINES } from "@/graphql/dashboard"; // Adjust path if needed
 import { format, isPast, differenceInDays } from "date-fns";
-import { FiClock, FiAlertCircle } from "react-icons/fi";
+import {
+  FiClock,
+  FiAlertCircle,
+  FiCheck,
+  FiChevronRight,
+} from "react-icons/fi";
+import { MARK_TASK_COMPLETE } from "@/graphql/dashboard";
+import { useRouter } from "next/navigation";
 
 export default function UpcomingDeadlines() {
+  const router = useRouter();
   const { data, loading, error } = useQuery(GET_UPCOMING_DEADLINES, {
-    variables: { days: 14 }, // Get deadlines for next 14 days
+    variables: { days: 7 }, // Get deadlines for next 14 days
   });
 
+  const [markTaskComplete, { loading: markingComplete }] = useMutation(
+    MARK_TASK_COMPLETE,
+    {
+      refetchQueries: ["GetUpcomingDeadlines", "GetTaskStats"],
+    }
+  );
+
+  const handleTaskClick = (taskId, boardId) => {
+    router.push(`/board/${boardId}?taskId=${taskId}`);
+  };
+
+  const handleViewAllClick = () => {
+    router.push("/deadlines"); // Navigate to a dedicated deadlines page
+  };
   // Loading state
   if (loading) {
     return (
@@ -87,7 +111,16 @@ export default function UpcomingDeadlines() {
           const isPastDue = isPast(new Date(task.dueDate));
 
           return (
-            <Box key={task.id} p={3} borderWidth="1px" borderRadius="md">
+            // Add onClick handler to make the card clickable
+            <Box
+              key={task.id}
+              p={3}
+              borderWidth="1px"
+              borderRadius="md"
+              onClick={() => handleTaskClick(task.id, task.boardId)}
+              cursor="pointer"
+              _hover={{ bg: "gray.50" }}
+            >
               <Flex justify="space-between" align="center">
                 <Text fontWeight="medium">{task.title}</Text>
                 <Badge colorScheme={deadlineColor}>
@@ -114,14 +147,51 @@ export default function UpcomingDeadlines() {
                 isIndeterminate={isPastDue}
               />
 
-              <Flex mt={2} justify="space-between">
-                <Badge colorScheme="blue">{task.boardTitle}</Badge>
-                <Badge colorScheme="cyan">{task.columnTitle}</Badge>
+              {/* Add this section with Flex layout to include the Complete button */}
+              <Flex mt={2} justify="space-between" align="center">
+                <Flex>
+                  <Badge colorScheme="blue" mr={2}>
+                    {task.boardTitle}
+                  </Badge>
+                  <Badge colorScheme="cyan">{task.columnTitle}</Badge>
+                </Flex>
+
+                {/* Add the Complete button here */}
+                <Button
+                  size="xs"
+                  colorScheme="green"
+                  leftIcon={<FiCheck />}
+                  isLoading={markingComplete}
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent card click when button is clicked
+                    markTaskComplete({
+                      variables: { id: task.id },
+                    });
+                  }}
+                >
+                  Complete
+                </Button>
               </Flex>
             </Box>
           );
         })}
       </VStack>
+
+      {data?.upcomingDeadlines?.length > 0 && (
+        <>
+          <Divider my={4} />
+          <Box textAlign="center">
+            <Button
+              rightIcon={<FiChevronRight />}
+              variant="ghost"
+              size="sm"
+              onClick={handleViewAllClick}
+            >
+              View All Deadlines
+            </Button>
+          </Box>
+        </>
+      )}
     </Box>
   );
 }

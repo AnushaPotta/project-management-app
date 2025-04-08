@@ -9,16 +9,29 @@ import {
   Badge,
   Spinner,
   Icon,
+  Button,
+  Divider,
 } from "@chakra-ui/react";
 import { GET_RECENT_ACTIVITY } from "@/graphql/dashboard"; // Adjust path if needed
 import { formatDistanceToNow } from "date-fns";
-import { FiActivity, FiAlertCircle } from "react-icons/fi";
+import { FiActivity, FiAlertCircle, FiChevronRight } from "react-icons/fi";
+import { useRouter } from "next/navigation";
 
 export default function RecentActivity() {
+  const router = useRouter();
   const { data, loading, error } = useQuery(GET_RECENT_ACTIVITY, {
     variables: { limit: 10 },
     pollInterval: 60000, // Optional: refresh every minute
   });
+
+  const handleActivityClick = (activity) => {
+    // Navigate to the related board
+    router.push(`/board/${activity.boardId}`);
+  };
+
+  const handleViewAllClick = () => {
+    router.push("/activities"); // Navigate to a dedicated activities page
+  };
 
   // Loading state
   if (loading) {
@@ -70,7 +83,16 @@ export default function RecentActivity() {
       </Heading>
       <VStack spacing={4} align="stretch" maxH="400px" overflowY="auto">
         {data.recentActivity.map((activity) => (
-          <Box key={activity.id} p={3} borderWidth="1px" borderRadius="md">
+          <Box
+            key={activity.id}
+            p={3}
+            borderWidth="1px"
+            borderRadius="md"
+            cursor="pointer" // Add cursor pointer to indicate clickable
+            onClick={() => handleActivityClick(activity)} // Add click handler
+            _hover={{ bg: "gray.50" }} // Add hover effect
+            transition="background 0.2s ease" // Smooth transition for hover
+          >
             <Flex justify="space-between" align="center">
               <Flex align="center">
                 <Icon as={FiActivity} mr={2} />
@@ -92,6 +114,22 @@ export default function RecentActivity() {
           </Box>
         ))}
       </VStack>
+
+      {data?.recentActivity?.length > 0 && (
+        <>
+          <Divider my={4} />
+          <Box textAlign="center">
+            <Button
+              rightIcon={<FiChevronRight />}
+              variant="ghost"
+              size="sm"
+              onClick={handleViewAllClick}
+            >
+              View All Activities
+            </Button>
+          </Box>
+        </>
+      )}
     </Box>
   );
 }

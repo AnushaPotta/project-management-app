@@ -37,3 +37,13 @@ export const GET_UPCOMING_DEADLINES = gql`
     }
   }
 `;
+
+export const MARK_TASK_COMPLETE = gql`
+  mutation MarkTaskComplete($id: ID!) {
+    markTaskComplete(id: $id) {
+      id
+      status
+      updatedAt
+    }
+  }
+`;
