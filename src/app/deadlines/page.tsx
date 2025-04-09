@@ -1,3 +1,4 @@
+"use client";
 import { useQuery, useMutation } from "@apollo/client";
 import {
   Box,

@@ -378,60 +378,91 @@ export const resolvers = {
       if (!user) throw new Error("Not authenticated");
 
       try {
-        // Get the card reference
-        const cardRef = adminDb.collection("cards").doc(id);
-        const cardDoc = await cardRef.get();
+        console.log(
+          `Attempting to mark card ${id} as complete for user ${user.uid}`
+        );
 
-        if (!cardDoc.exists) {
+        // Get all boards for the user
+        const boardsSnapshot = await adminDb.collection("boards").get();
+
+        // Initialize variables to track our search
+        let foundCard = null;
+        let boardDocId = null;
+        let boardData = null;
+        let columnIndex = -1;
+        let cardIndex = -1;
+
+        // Search through all boards
+        for (const boardDoc of boardsSnapshot.docs) {
+          const board = boardDoc.data();
+          const columns = board.columns || [];
+
+          // Search through columns
+          for (let colIdx = 0; colIdx < columns.length; colIdx++) {
+            const column = columns[colIdx];
+            const cards = column.cards || [];
+
+            // Search through cards
+            for (let cardIdx = 0; cardIdx < cards.length; cardIdx++) {
+              const card = cards[cardIdx];
+              if (card.id === id) {
+                // Found the card!
+                foundCard = card;
+                boardDocId = boardDoc.id;
+                boardData = board;
+                columnIndex = colIdx;
+                cardIndex = cardIdx;
+                break;
+              }
+            }
+
+            if (foundCard) break;
+          }
+
+          if (foundCard) break;
+        }
+
+        if (!foundCard) {
           throw new Error(`Card with ID ${id} not found`);
         }
 
+        console.log(
+          `Found card in board ${boardDocId}, column ${columnIndex}, position ${cardIndex}`
+        );
+
+        // Create current timestamp
         const updatedAt = new Date().toISOString();
 
-        // Update the card to mark it as completed
-        await cardRef.update({
+        // Create updated card
+        const updatedCard = {
+          ...foundCard,
           status: "completed",
           updatedAt: updatedAt,
+        };
+
+        // Update the card in the columns structure
+        boardData.columns[columnIndex].cards[cardIndex] = updatedCard;
+
+        // Update the board document in Firestore
+        await adminDb.collection("boards").doc(boardDocId).update({
+          columns: boardData.columns,
+          // Use a JavaScript Date instead of admin.firestore.FieldValue.serverTimestamp()
+          updatedAt: new Date(),
         });
 
-        // Log the activity for this action
-        try {
-          const card = cardDoc.data();
-          const boardId = card.boardId;
+        console.log(
+          `Successfully marked card ${id} as complete in board ${boardDocId}`
+        );
 
-          // Get the board details for the activity log
-          const boardDoc = await adminDb
-            .collection("boards")
-            .doc(boardId)
-            .get();
-          const board = boardDoc.exists
-            ? boardDoc.data()
-            : { title: "Unknown Board" };
-
-          // Add activity record
-          await adminDb.collection("activities").add({
-            type: "TASK_COMPLETED",
-            boardId: boardId,
-            boardTitle: board.title,
-            userId: user.uid,
-            userName: user.displayName || "Anonymous User",
-            timestamp: updatedAt,
-            description: `Completed task: ${card.title}`,
-          });
-        } catch (activityError) {
-          console.error("Error logging activity:", activityError);
-          // Don't fail the mutation if activity logging fails
-        }
-
-        // Return the updated card data in the format expected by the mutation
+        // Return the updated card data
         return {
-          id: cardDoc.id,
+          id: updatedCard.id,
           status: "completed",
           updatedAt: updatedAt,
         };
       } catch (error) {
         console.error("Error marking task complete:", error);
-        throw new Error("Failed to mark task as complete: " + error.message);
+        throw new Error(`Failed to mark task as complete: ${error.message}`);
       }
     },
 
