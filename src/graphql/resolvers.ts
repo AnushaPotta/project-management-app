@@ -24,6 +24,28 @@ interface UpcomingDeadlinesArgs {
   days?: number;
 }
 
+// Helper function to find a card by ID in the boards collection
+function findCardById(boardsSnapshot, cardId) {
+  for (const boardDoc of boardsSnapshot.docs) {
+    const boardData = boardDoc.data();
+    const columns = boardData.columns || [];
+
+    for (let columnIndex = 0; columnIndex < columns.length; columnIndex++) {
+      const column = columns[columnIndex];
+      const cards = column.cards || [];
+
+      for (let cardIndex = 0; cardIndex < cards.length; cardIndex++) {
+        const card = cards[cardIndex];
+        if (card.id === cardId) {
+          return { card, boardDoc, boardData, columnIndex, cardIndex };
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 // Add this helper function to the top of your resolvers.ts file:
 const formatTimestamp = (timestamp) => {
   try {
@@ -385,76 +407,59 @@ export const resolvers = {
         // Get all boards for the user
         const boardsSnapshot = await adminDb.collection("boards").get();
 
-        // Initialize variables to track our search
-        let foundCard = null;
-        let boardDocId = null;
-        let boardData = null;
-        let columnIndex = -1;
-        let cardIndex = -1;
+        // Find the card and its location
+        const found = findCardById(boardsSnapshot, id);
 
-        // Search through all boards
-        for (const boardDoc of boardsSnapshot.docs) {
-          const board = boardDoc.data();
-          const columns = board.columns || [];
-
-          // Search through columns
-          for (let colIdx = 0; colIdx < columns.length; colIdx++) {
-            const column = columns[colIdx];
-            const cards = column.cards || [];
-
-            // Search through cards
-            for (let cardIdx = 0; cardIdx < cards.length; cardIdx++) {
-              const card = cards[cardIdx];
-              if (card.id === id) {
-                // Found the card!
-                foundCard = card;
-                boardDocId = boardDoc.id;
-                boardData = board;
-                columnIndex = colIdx;
-                cardIndex = cardIdx;
-                break;
-              }
-            }
-
-            if (foundCard) break;
-          }
-
-          if (foundCard) break;
-        }
-
-        if (!foundCard) {
+        if (!found) {
           throw new Error(`Card with ID ${id} not found`);
         }
 
+        const { card, boardDoc, boardData, columnIndex, cardIndex } = found;
+
         console.log(
-          `Found card in board ${boardDocId}, column ${columnIndex}, position ${cardIndex}`
+          `Found card in board ${boardDoc.id}, column ${columnIndex}, position ${cardIndex}`
         );
 
-        // Create current timestamp
+        // Update the card with ALL possible completion flags
         const updatedAt = new Date().toISOString();
-
-        // Create updated card
         const updatedCard = {
-          ...foundCard,
+          ...card,
           status: "completed",
+          isCompleted: true,
+          completed: true,
+          done: true,
           updatedAt: updatedAt,
         };
 
-        // Update the card in the columns structure
+        // Option 1: Update card in current column
         boardData.columns[columnIndex].cards[cardIndex] = updatedCard;
 
-        // Update the board document in Firestore
-        await adminDb.collection("boards").doc(boardDocId).update({
+        // Option 2: Move card to "Done" column if it exists
+        const doneColumnIndex = boardData.columns.findIndex(
+          (col) =>
+            col.title.toLowerCase() === "done" ||
+            col.title.toLowerCase() === "completed"
+        );
+
+        if (doneColumnIndex !== -1 && doneColumnIndex !== columnIndex) {
+          console.log(`Moving card to "Done" column (${doneColumnIndex})`);
+
+          // Remove from current column
+          boardData.columns[columnIndex].cards.splice(cardIndex, 1);
+
+          // Add to Done column
+          updatedCard.columnId = boardData.columns[doneColumnIndex].id;
+          boardData.columns[doneColumnIndex].cards.push(updatedCard);
+        }
+
+        // Update the board document
+        await adminDb.collection("boards").doc(boardDoc.id).update({
           columns: boardData.columns,
-          // Use a JavaScript Date instead of admin.firestore.FieldValue.serverTimestamp()
           updatedAt: new Date(),
         });
 
-        console.log(
-          `Successfully marked card ${id} as complete in board ${boardDocId}`
-        );
+        console.log(`Successfully marked card ${id} as complete`);
 
-        // Return the updated card data
         return {
           id: updatedCard.id,
           status: "completed",
@@ -465,7 +470,6 @@ export const resolvers = {
         throw new Error(`Failed to mark task as complete: ${error.message}`);
       }
     },
-
     // Update a board
     updateBoard: async (_, { id, input }, { user }) => {
       try {
