@@ -27,7 +27,9 @@ import { useRouter } from "next/navigation";
 export default function UpcomingDeadlines() {
   const router = useRouter();
   const { data, loading, error } = useQuery(GET_UPCOMING_DEADLINES, {
-    variables: { days: 7 }, // Get deadlines for next 14 days
+    variables: { days: 30 }, // Get deadlines for next 14 days
+    onCompleted: (data) => console.log("Query completed:", data),
+    onError: (error) => console.error("Query error:", error),
   });
 
   const [markTaskComplete, { loading: markingComplete }] = useMutation(
@@ -98,6 +100,8 @@ export default function UpcomingDeadlines() {
     if (daysLeft <= 7) return "yellow";
     return "green";
   };
+
+  console.log("UpcomingDeadlines render:", { loading, error, data });
 
   return (
     <Box p={5} shadow="md" borderWidth="1px" borderRadius="lg">

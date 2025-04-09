@@ -2,6 +2,15 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { firestore } from "firebase-admin";
 import { logActivity } from "@/utils/activity";
+import { db } from "@/lib/firebase";
+
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  DocumentData,
+} from "firebase/firestore";
 
 interface Context {
   user: any; // Replace with actual user type
@@ -208,58 +217,155 @@ export const resolvers = {
     },
 
     // Upcoming deadlines query
-    upcomingDeadlines: async (
-      _: any,
-      { days = 7 }: UpcomingDeadlinesArgs,
-      { user }: Context
-    ) => {
+
+    upcomingDeadlines: async (_, { days = 30 }, { user }) => {
       if (!user) throw new Error("Not authenticated");
+      console.log("Resolver called with user:", user.uid, "and days:", days);
 
-      // Calculate the date range
-      const now = new Date();
-      const future = new Date();
-      future.setDate(future.getDate() + days);
+      try {
+        // First, let's verify we can get boards
+        console.log("Looking for boards with user:", user.uid);
 
-      const boardsRef = adminDb.collection("boards");
-      const snapshot = await boardsRef
-        .where("memberIds", "array-contains", user.uid)
-        .get();
+        // Get all boards and filter manually to debug
+        const boardsSnapshot = await adminDb.collection("boards").get();
+        console.log("Total boards in system:", boardsSnapshot.size);
 
-      const deadlines = [];
+        // Filter manually to see if we can find user's boards
+        const userBoards = [];
+        for (const board of boardsSnapshot.docs) {
+          const boardData = board.data();
+          console.log("Board:", board.id, "members:", boardData.members);
 
-      // Find cards with due dates
-      snapshot.docs.forEach((doc) => {
-        const board = doc.data();
-        const boardId = doc.id;
+          // Check if board belongs to user, accounting for different data structures
+          const members = boardData.members || [];
+          const belongsToUser = Array.isArray(members)
+            ? members.includes(user.uid)
+            : members === user.uid || members[user.uid];
 
-        board.columns.forEach((column) => {
-          if (Array.isArray(column.cards)) {
-            column.cards.forEach((card) => {
-              if (card.dueDate) {
-                const dueDate = new Date(card.dueDate);
-
-                // Check if due date is within range
-                if (dueDate >= now && dueDate <= future) {
-                  deadlines.push({
-                    id: card.id,
-                    title: card.title,
-                    dueDate: card.dueDate,
-                    boardId: boardId,
-                    boardTitle: board.title,
-                    columnId: column.id,
-                    columnTitle: column.title,
-                  });
-                }
-              }
-            });
+          if (belongsToUser) {
+            console.log("User board found:", board.id, boardData.title);
+            userBoards.push({ id: board.id, ...boardData });
           }
-        });
-      });
+        }
 
-      // Sort by due date (nearest first)
-      return deadlines.sort(
-        (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
-      );
+        console.log("User boards found:", userBoards.length);
+
+        // Proceed with date filtering
+        const now = new Date();
+        now.setHours(0, 0, 0, 0); // Start of today
+
+        const future = new Date();
+        future.setDate(future.getDate() + days);
+        future.setHours(23, 59, 59, 999); // End of last day
+
+        console.log(
+          "Date range:",
+          now.toISOString(),
+          "to",
+          future.toISOString()
+        );
+
+        const deadlines = [];
+
+        // Use the manually found user boards
+        for (const board of userBoards) {
+          console.log("Processing board:", board.id, board.title);
+
+          // Get columns for this board
+          const columnsSnapshot = await adminDb
+            .collection("columns")
+            .where("boardId", "==", board.id)
+            .get();
+
+          console.log(
+            "Found columns:",
+            columnsSnapshot.size,
+            "for board",
+            board.id
+          );
+
+          for (const columnDoc of columnsSnapshot.docs) {
+            const column = columnDoc.data();
+            console.log("Processing column:", columnDoc.id, column.title);
+
+            // Get cards for this column
+            const cardsRef = adminDb.collection("cards");
+            const cardsSnapshot = await cardsRef
+              .where("columnId", "==", columnDoc.id)
+              .get();
+
+            console.log(
+              "Found cards:",
+              cardsSnapshot.size,
+              "for column",
+              columnDoc.id
+            );
+
+            for (const cardDoc of cardsSnapshot.docs) {
+              const card = cardDoc.data();
+              console.log(
+                "Card:",
+                cardDoc.id,
+                card.title,
+                "dueDate:",
+                card.dueDate
+              );
+
+              // Skip completed cards
+              if (card.status === "completed") {
+                console.log("Skipping completed card:", cardDoc.id);
+                continue;
+              }
+
+              if (card.dueDate) {
+                try {
+                  // Convert string to Date, regardless of format
+                  const dueDate = new Date(card.dueDate);
+
+                  if (!isNaN(dueDate.getTime())) {
+                    console.log(
+                      "Card date valid, comparing:",
+                      dueDate.toISOString()
+                    );
+
+                    if (dueDate >= now && dueDate <= future) {
+                      console.log(
+                        "Card is within date range, adding to deadlines"
+                      );
+                      deadlines.push({
+                        id: cardDoc.id,
+                        title: card.title,
+                        dueDate: card.dueDate,
+                        boardId: board.id,
+                        boardTitle: board.title,
+                        columnId: columnDoc.id,
+                        columnTitle: column.title,
+                      });
+                    } else {
+                      console.log("Card date outside range:", dueDate);
+                    }
+                  } else {
+                    console.log("Invalid date format for card:", cardDoc.id);
+                  }
+                } catch (dateError) {
+                  console.error("Error parsing date:", dateError);
+                }
+              } else {
+                console.log("Card has no dueDate");
+              }
+            }
+          }
+        }
+
+        console.log("Total deadlines found:", deadlines.length);
+        return deadlines.sort(
+          (a, b) =>
+            new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+        );
+      } catch (error) {
+        console.error("Error fetching upcoming deadlines:", error);
+        throw error;
+      }
     },
   },
 
@@ -303,6 +409,67 @@ export const resolvers = {
       } catch (error) {
         console.error("Error creating board:", error);
         throw new Error("Failed to create board");
+      }
+    },
+
+    markTaskComplete: async (_, { id }, { user }) => {
+      if (!user) throw new Error("Not authenticated");
+
+      try {
+        // Get the card reference
+        const cardRef = adminDb.collection("cards").doc(id);
+        const cardDoc = await cardRef.get();
+
+        if (!cardDoc.exists) {
+          throw new Error(`Card with ID ${id} not found`);
+        }
+
+        const updatedAt = new Date().toISOString();
+
+        // Update the card to mark it as completed
+        await cardRef.update({
+          status: "completed",
+          updatedAt: updatedAt,
+        });
+
+        // Log the activity for this action
+        try {
+          const card = cardDoc.data();
+          const boardId = card.boardId;
+
+          // Get the board details for the activity log
+          const boardDoc = await adminDb
+            .collection("boards")
+            .doc(boardId)
+            .get();
+          const board = boardDoc.exists
+            ? boardDoc.data()
+            : { title: "Unknown Board" };
+
+          // Add activity record
+          await adminDb.collection("activities").add({
+            type: "TASK_COMPLETED",
+            boardId: boardId,
+            boardTitle: board.title,
+            userId: user.uid,
+            userName: user.displayName || "Anonymous User",
+            timestamp: updatedAt,
+            description: `Completed task: ${card.title}`,
+          });
+        } catch (activityError) {
+          console.error("Error logging activity:", activityError);
+          // Don't fail the mutation if activity logging fails
+        }
+
+        // Return the updated card data in the format expected by the mutation
+        return {
+          id: cardDoc.id,
+          status: "completed",
+          updatedAt: updatedAt,
+        };
+      } catch (error) {
+        console.error("Error marking task complete:", error);
+        throw new Error("Failed to mark task as complete: " + error.message);
       }
     },
 

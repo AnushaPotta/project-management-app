@@ -34,6 +34,7 @@ export const GET_UPCOMING_DEADLINES = gql`
       dueDate
       boardId
       boardTitle
+      columnId
       columnTitle
     }
   }

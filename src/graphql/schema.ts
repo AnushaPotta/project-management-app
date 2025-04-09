@@ -19,6 +19,8 @@ export const typeDefs = `#graphql
     assignedTo: String
     dueDate: String
     labels: [String]
+    status: String
+  updatedAt: String
   }
 
   type Column {
@@ -81,6 +83,8 @@ export const typeDefs = `#graphql
   type Query {
     boards: [Board]
     board(id: ID!): Board
+        upcomingDeadlines(days: Int): [DeadlineCard!]!
+
   }
 
 type TaskStats {
@@ -105,9 +109,9 @@ type DeadlineCard {
   id: ID!
   title: String!
   dueDate: String!
-  boardId: String!
+  boardId: ID!
   boardTitle: String!
-  columnId: String!
+  columnId: ID!
   columnTitle: String!
 }
 
@@ -140,5 +144,7 @@ extend type Query {
       source: DragItemInput!
       destination: DragItemInput!
     ): Board
+      markTaskComplete(id: ID!): Card
+
   }
 `;
