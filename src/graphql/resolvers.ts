@@ -223,40 +223,26 @@ export const resolvers = {
       console.log("Resolver called with user:", user.uid, "and days:", days);
 
       try {
-        // First, let's verify we can get boards
-        console.log("Looking for boards with user:", user.uid);
-
-        // Get all boards and filter manually to debug
+        // Get all boards for the user
         const boardsSnapshot = await adminDb.collection("boards").get();
-        console.log("Total boards in system:", boardsSnapshot.size);
-
-        // Filter manually to see if we can find user's boards
-        const userBoards = [];
-        for (const board of boardsSnapshot.docs) {
-          const boardData = board.data();
-          console.log("Board:", board.id, "members:", boardData.members);
-
-          // Check if board belongs to user, accounting for different data structures
-          const members = boardData.members || [];
-          const belongsToUser = Array.isArray(members)
-            ? members.includes(user.uid)
-            : members === user.uid || members[user.uid];
-
-          if (belongsToUser) {
-            console.log("User board found:", board.id, boardData.title);
-            userBoards.push({ id: board.id, ...boardData });
-          }
-        }
+        const userBoards = boardsSnapshot.docs
+          .filter((doc) => {
+            const boardData = doc.data();
+            const members = boardData.members || [];
+            return members.some(
+              (member) => typeof member === "object" && member.id === user.uid
+            );
+          })
+          .map((doc) => ({ id: doc.id, ...doc.data() }));
 
         console.log("User boards found:", userBoards.length);
 
-        // Proceed with date filtering
+        // Date range setup
         const now = new Date();
-        now.setHours(0, 0, 0, 0); // Start of today
-
+        now.setHours(0, 0, 0, 0);
         const future = new Date();
         future.setDate(future.getDate() + days);
-        future.setHours(23, 59, 59, 999); // End of last day
+        future.setHours(23, 59, 59, 999);
 
         console.log(
           "Date range:",
@@ -267,91 +253,67 @@ export const resolvers = {
 
         const deadlines = [];
 
-        // Use the manually found user boards
+        // Process each board
         for (const board of userBoards) {
           console.log("Processing board:", board.id, board.title);
 
-          // Get columns for this board
-          const columnsSnapshot = await adminDb
-            .collection("columns")
-            .where("boardId", "==", board.id)
-            .get();
+          // Get columns from the nested array in the board document
+          const columns = board.columns || [];
+          console.log(`Found ${columns.length} columns in board ${board.id}`);
 
-          console.log(
-            "Found columns:",
-            columnsSnapshot.size,
-            "for board",
-            board.id
-          );
+          // Process each column
+          for (const column of columns) {
+            console.log(`Processing column: ${column.id}, ${column.title}`);
 
-          for (const columnDoc of columnsSnapshot.docs) {
-            const column = columnDoc.data();
-            console.log("Processing column:", columnDoc.id, column.title);
+            // Get cards from the nested array in the column object
+            const cards = column.cards || [];
+            console.log(`Found ${cards.length} cards in column ${column.id}`);
 
-            // Get cards for this column
-            const cardsRef = adminDb.collection("cards");
-            const cardsSnapshot = await cardsRef
-              .where("columnId", "==", columnDoc.id)
-              .get();
-
-            console.log(
-              "Found cards:",
-              cardsSnapshot.size,
-              "for column",
-              columnDoc.id
-            );
-
-            for (const cardDoc of cardsSnapshot.docs) {
-              const card = cardDoc.data();
+            // Process each card
+            for (const card of cards) {
               console.log(
-                "Card:",
-                cardDoc.id,
-                card.title,
-                "dueDate:",
-                card.dueDate
+                `Checking card: ${card.id}, ${card.title}, dueDate: ${card.dueDate}`
               );
 
-              // Skip completed cards
+              // Skip completed cards (if you have a status field)
+              // Adapt this condition based on how you track completed cards
               if (card.status === "completed") {
-                console.log("Skipping completed card:", cardDoc.id);
+                console.log(`Skipping completed card: ${card.id}`);
                 continue;
               }
 
+              // Check if card has a due date
               if (card.dueDate) {
                 try {
-                  // Convert string to Date, regardless of format
                   const dueDate = new Date(card.dueDate);
 
                   if (!isNaN(dueDate.getTime())) {
+                    console.log(`Card date: ${dueDate.toISOString()}`);
                     console.log(
-                      "Card date valid, comparing:",
-                      dueDate.toISOString()
+                      `Is after ${now.toISOString()}? ${dueDate >= now}`
+                    );
+                    console.log(
+                      `Is before ${future.toISOString()}? ${dueDate <= future}`
                     );
 
                     if (dueDate >= now && dueDate <= future) {
-                      console.log(
-                        "Card is within date range, adding to deadlines"
-                      );
+                      console.log(`Adding card to deadlines: ${card.title}`);
                       deadlines.push({
-                        id: cardDoc.id,
+                        id: card.id,
                         title: card.title,
                         dueDate: card.dueDate,
                         boardId: board.id,
                         boardTitle: board.title,
-                        columnId: columnDoc.id,
+                        columnId: column.id,
                         columnTitle: column.title,
                       });
-                    } else {
-                      console.log("Card date outside range:", dueDate);
                     }
                   } else {
-                    console.log("Invalid date format for card:", cardDoc.id);
+                    console.log(`Invalid date format: ${card.dueDate}`);
                   }
                 } catch (dateError) {
-                  console.error("Error parsing date:", dateError);
+                  console.error(`Error parsing date: ${dateError}`);
                 }
-              } else {
-                console.log("Card has no dueDate");
               }
             }
           }
@@ -364,7 +326,7 @@ export const resolvers = {
         );
       } catch (error) {
         console.error("Error fetching upcoming deadlines:", error);
-        throw error;
+        return [];
       }
     },
   },
