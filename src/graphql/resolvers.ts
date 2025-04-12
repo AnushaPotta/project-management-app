@@ -1041,8 +1041,7 @@ export const resolvers = {
         if (destColumnIndex === -1) {
           throw new Error("Destination column not found");
         }
-
-        // Get the card to move
+// Get the card to move
         const cardToMove =
           boardData.columns[sourceColumnIndex].cards[source.index];
         if (!cardToMove) {
@@ -1059,21 +1058,34 @@ export const resolvers = {
           cards: sourceCards,
         };
 
-        // Add card to destination column at the specified index
+        // Update the card with new columnId and order
+        const updatedCardToMove = {
+          ...cardToMove,
+          columnId: destination.columnId, // Update the columnId property
+          order: destination.index // Set the new order
+        };
+
+        // Add updated card to destination column at the specified index
         const destCards = [...boardData.columns[destColumnIndex].cards];
-        destCards.splice(destination.index, 0, cardToMove);
+        destCards.splice(destination.index, 0, updatedCardToMove);
+
+        // Update order for all cards in destination column
+        const updatedDestCards = destCards.map((card, idx) => ({
+          ...card,
+          order: idx
+        }));
 
         // Create updated destination column
         const updatedDestColumn = {
           ...boardData.columns[destColumnIndex],
-          cards: destCards,
+          cards: updatedDestCards,
         };
 
         // Update the columns array
         const updatedColumns = [...boardData.columns];
         updatedColumns[sourceColumnIndex] = updatedSourceColumn;
         updatedColumns[destColumnIndex] = updatedDestColumn;
-
+        
         // Update the board
         await boardRef.update({
           columns: updatedColumns,
