@@ -248,42 +248,68 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     async (source: DragItem, destination: DragItem) => {
       if (!currentBoard) return;
 
-      // Create a deep copy of the current board columns for optimistic update
-      const updatedColumns = JSON.parse(JSON.stringify(currentBoard.columns));
-      
-      // Find the source and destination column indices
-      const sourceColumnIndex = updatedColumns.findIndex(
-        (col) => col.id === source.columnId
-      );
-      const destColumnIndex = updatedColumns.findIndex(
-        (col) => col.id === destination.columnId
-      );
-      
-      if (sourceColumnIndex === -1 || destColumnIndex === -1) {
-        console.error("Source or destination column not found");
-        return;
-      }
-      
-      // Get the card to move
-      const cardToMove = updatedColumns[sourceColumnIndex].cards[source.index];
-      if (!cardToMove) {
-        console.error("Card not found at source index");
-        return;
-      }
-      
-      // Remove the card from source
-      updatedColumns[sourceColumnIndex].cards.splice(source.index, 1);
-      
-      // Add the card to destination
-      updatedColumns[destColumnIndex].cards.splice(destination.index, 0, cardToMove);
-      
-      // Update local state immediately for a smooth UI experience
-      setCurrentBoard((prev) => 
-        prev ? { ...prev, columns: updatedColumns } : null
-      );
+      // Create a complete deep copy of the board to avoid reference issues
+      const updatedBoard = JSON.parse(JSON.stringify(currentBoard));
       
       try {
-        // Then send the mutation to the server
+        // Find source and destination column indices
+        const sourceColumnIndex = updatedBoard.columns.findIndex(
+          (col) => col.id === source.columnId
+        );
+        const destColumnIndex = updatedBoard.columns.findIndex(
+          (col) => col.id === destination.columnId
+        );
+        
+        if (sourceColumnIndex === -1 || destColumnIndex === -1) {
+          console.error("Source or destination column not found");
+          return;
+        }
+        
+        // Get the card to move
+        const sourceColumn = updatedBoard.columns[sourceColumnIndex];
+        const destColumn = updatedBoard.columns[destColumnIndex];
+        
+        if (!sourceColumn.cards || !destColumn.cards) {
+          console.error("Cards array is missing in source or destination column");
+          return;
+        }
+        
+        // Make sure we're working with arrays
+        if (!Array.isArray(sourceColumn.cards)) {
+          sourceColumn.cards = [];
+        }
+        if (!Array.isArray(destColumn.cards)) {
+          destColumn.cards = [];
+        }
+        
+        // Remove the card from source
+        const [movedCard] = sourceColumn.cards.splice(source.index, 1);
+        
+        if (!movedCard) {
+          console.error("Card not found at source index");
+          return;
+        }
+        
+        // Update the card properties to match its new location
+        movedCard.columnId = destination.columnId;
+        movedCard.order = destination.index;
+        
+        // Insert the card at the destination position
+        destColumn.cards.splice(destination.index, 0, movedCard);
+        
+        // Update order for all cards in both columns
+        sourceColumn.cards.forEach((card, idx) => {
+          card.order = idx;
+        });
+        
+        destColumn.cards.forEach((card, idx) => {
+          card.order = idx;
+        });
+        
+        // Apply the optimistic update immediately
+        setCurrentBoard(updatedBoard);
+        
+        // Send the mutation to the server
         const { data } = await moveCardMutation({
           variables: {
             boardId: currentBoard.id,
@@ -295,33 +321,18 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
             moveCard: {
               __typename: "Board",
               id: currentBoard.id,
-              title: currentBoard.title,
-              description: currentBoard.description,
-              background: currentBoard.background,
-              isStarred: currentBoard.isStarred,
-              createdAt: currentBoard.createdAt,
-              updatedAt: currentBoard.updatedAt,
-              members: currentBoard.members.map(member => ({
-                __typename: "Member",
-                ...member
-              })),
-              columns: updatedColumns.map(col => ({
-                __typename: "Column",
-                ...col,
-                cards: col.cards.map(card => ({
-                  __typename: "Card",
-                  ...card
-                }))
-              }))
+              ...updatedBoard
             }
           }
         });
         
-        // Update with the server response data
-        setCurrentBoard((prev) => (prev ? { ...prev, ...data.moveCard } : null));
+        // Merge server response data if needed
+        if (data && data.moveCard) {
+          setCurrentBoard(data.moveCard);
+        }
       } catch (error) {
         console.error("Error moving card:", error);
-        // Revert to original state if there's an error
+        // In case of error, revert to original state
         setCurrentBoard(currentBoard);
       }
     },

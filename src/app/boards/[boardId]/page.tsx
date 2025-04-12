@@ -158,76 +158,102 @@ export default function BoardPage() {
     }
 
     // For card moving
-    if (type === "card") {
+    if (type === "CARD") {
       try {
         // Keep a copy of the board BEFORE any updates
         const prevBoard = JSON.parse(JSON.stringify(board));
 
         // Create an optimistic update for the UI
         const newBoard = { ...board };
-        const sourceColumn = newBoard.columns.find(
+
+        // Get the card to move without immediately removing it
+        const cardToMove = newBoard.columns.find(
           (col) => col.id === source.droppableId
-        );
-        const destColumn = newBoard.columns.find(
-          (col) => col.id === destination.droppableId
-        );
-
-        if (sourceColumn && destColumn) {
-          // Remove card from source column
-          const [movedCard] = sourceColumn.cards.splice(source.index, 1);
-
-          // Add card to destination column
-          destColumn.cards.splice(destination.index, 0, movedCard);
-
-          // Update the board state immediately for responsive UI
-          setBoard(newBoard);
+        )?.cards[source.index];
+        if (!cardToMove) {
+          console.error("Card not found at source index");
+          return;
         }
 
-        // Call your moveCard mutation
-        const { data } = await moveCardMutation({
-          variables: {
-            boardId: board.id,
-            source: {
-              columnId: source.droppableId,
-              index: source.index,
+        // Create a copy of the card
+        const movedCard = { ...cardToMove };
+
+        // Update the card's properties to match its new location
+        movedCard.columnId = destination.droppableId;
+        movedCard.order = destination.index;
+
+        // Create new board with modified columns
+        const updatedBoard = {
+          ...newBoard,
+          columns: newBoard.columns.map((column) => {
+            // Source column: filter out the moved card
+            if (column.id === source.droppableId) {
+              const updatedCards = column.cards
+                .filter((card) => card.id !== cardToMove.id)
+                .map((card, idx) => ({
+                  ...card,
+                  order: idx,
+                }));
+
+              return {
+                ...column,
+                cards: updatedCards,
+              };
+            }
+
+            // Destination column: insert the moved card
+            if (column.id === destination.droppableId) {
+              const beforeCards = column.cards.slice(0, destination.index);
+              const afterCards = column.cards.slice(destination.index);
+
+              const updatedCards = [
+                ...beforeCards,
+                movedCard,
+                ...afterCards,
+              ].map((card, idx) => ({
+                ...card,
+                order: idx,
+              }));
+
+              return {
+                ...column,
+                cards: updatedCards,
+              };
+            }
+
+            // Other columns remain unchanged
+            return column;
+          }),
+        };
+
+        // Update the board state immediately for responsive UI
+        setBoard(updatedBoard);
+
+        // Now call the mutation with our updated board
+        try {
+          await moveCardMutation({
+            variables: {
+              boardId: board.id,
+              source: {
+                columnId: source.droppableId,
+                index: source.index,
+              },
+              destination: {
+                columnId: destination.droppableId,
+                index: destination.index,
+              },
             },
-            destination: {
-              columnId: destination.droppableId,
-              index: destination.index,
+            optimisticResponse: {
+              __typename: "Mutation",
+              moveCard: updatedBoard,
             },
-          },
-        });
-
-        if (data?.moveCard) {
-          // Get the server data
-          const serverData = data.moveCard;
-
-          // Create a map of columns by ID from server response
-          const serverColumnsMap = {};
-          if (serverData.columns) {
-            serverData.columns.forEach((col) => {
-              serverColumnsMap[col.id] = col;
-            });
-
-            // Create an ordered array of columns based on our saved order
-            const orderedColumns = columnOrder
-              .map((colId) => {
-                if (serverColumnsMap[colId]) {
-                  return serverColumnsMap[colId];
-                }
-                // Fallback to the column from prev board if not in server response
-                return prevBoard.columns.find((col) => col.id === colId);
-              })
-              .filter(Boolean);
-
-            // Set the board with preserved column order
-            const preservedBoard = {
-              ...serverData,
-              columns: orderedColumns,
-            };
-
-            setBoard(preservedBoard);
-          }
+          });
+        } catch (error) {
+          console.error("Error sending card move mutation:", error);
+          toast({
+            title: "Error saving card position",
+            status: "error",
+          });
         }
       } catch (error) {
         console.error("Error moving card:", error);
