@@ -31,6 +31,9 @@ export default function BoardPage() {
   const { boardId } = useParams();
   const [board, setBoard] = useState<Board | null>(null);
   const [isAddColumnModalOpen, setIsAddColumnModalOpen] = useState(false);
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
+  const [isInitialized, setIsInitialized] = useState(false);
+
   const toast = useToast();
 
   const bgColor = useColorModeValue("gray.50", "gray.900");
@@ -53,11 +56,26 @@ export default function BoardPage() {
   const [moveCardMutation] = useMutation(MOVE_CARD);
   const [moveColumnMutation] = useMutation(MOVE_COLUMN);
 
+  // Set board from query data
   useEffect(() => {
+    console.log("Query data received:", data);
     if (data?.board) {
+      console.log("Setting board from query data:", data.board);
       setBoard(data.board);
     }
   }, [data]);
+
+  useEffect(() => {
+    if (board?.columns && board.columns.length > 0) {
+      // Only initialize column order once when board first loads
+      if (!isInitialized) {
+        const colIds = board.columns.map((col) => col.id);
+        console.log("Setting column order:", colIds);
+        setColumnOrder(colIds);
+        setIsInitialized(true);
+      }
+    }
+  }, [board, isInitialized]);
 
   const handleError = (error: any, toast: any) => {
     console.error(error);
@@ -84,122 +102,144 @@ export default function BoardPage() {
 
     if (!board) return;
 
-    // Create a copy of the board to work with
-    const newBoard = { ...board };
-
-    // Handle column dragging
-    if (type === "COLUMN") {
-      const newColumns = Array.from(newBoard.columns);
-      const [movedColumn] = newColumns.splice(source.index, 1);
-      newColumns.splice(destination.index, 0, movedColumn);
-
-      // Update column orders immutably
-      const updatedColumns = newColumns.map((column, index) => ({
-        ...column,
-        order: index,
-      }));
-
-      newBoard.columns = updatedColumns;
-      setBoard(newBoard);
-
+    // For column reordering
+    if (type === "column") {
       try {
-        const { data } = await moveColumnMutation({
+        // Create a new order array
+        const newColumnOrder = Array.from(columnOrder);
+        newColumnOrder.splice(source.index, 1);
+        newColumnOrder.splice(destination.index, 0, columnOrder[source.index]);
+
+        // Update local state immediately for responsive UI
+        setColumnOrder(newColumnOrder);
+
+        // Create a new board with reordered columns
+        const updatedColumns = newColumnOrder
+          .map((colId) => board.columns.find((col) => col.id === colId))
+          .filter(Boolean);
+
+        const updatedBoard = {
+          ...board,
+          columns: updatedColumns,
+        };
+
+        // Update board state immediately
+        setBoard(updatedBoard);
+
+        // Call server mutation
+        await moveColumnMutation({
           variables: {
             boardId: board.id,
+            columnId: columnOrder[source.index],
             sourceIndex: source.index,
             destinationIndex: destination.index,
           },
+          // Important: Tell Apollo to update the cache with our local changes
+          optimisticResponse: {
+            __typename: "Mutation",
+            moveColumn: updatedBoard,
+          },
+          update: (cache) => {
+            // This prevents Apollo from reverting our local state
+            // We're saying: "Don't update the UI based on server response"
+            // Instead, keep using our optimistic result
+          },
         });
-
-        if (data?.moveColumn) {
-          setBoard(data.moveColumn);
-        }
       } catch (error) {
-        handleError(error, toast);
-        refetch(); // Reload board to reset to server state
+        console.error("Error moving column:", error);
+        // Revert to the original state if there's an error
+        refetch();
+        toast({
+          title: "Error moving column",
+          status: "error",
+        });
       }
       return;
     }
 
-    // Handle card dragging
-    const sourceColumn = newBoard.columns.find(
-      (col) => col.id === source.droppableId
-    );
-    const destColumn = newBoard.columns.find(
-      (col) => col.id === destination.droppableId
-    );
+    // For card moving
+    if (type === "card") {
+      try {
+        // Keep a copy of the board BEFORE any updates
+        const prevBoard = JSON.parse(JSON.stringify(board));
 
-    if (!sourceColumn || !destColumn) return;
+        // Create an optimistic update for the UI
+        const newBoard = { ...board };
+        const sourceColumn = newBoard.columns.find(
+          (col) => col.id === source.droppableId
+        );
+        const destColumn = newBoard.columns.find(
+          (col) => col.id === destination.droppableId
+        );
 
-    // Moving within the same column
-    if (sourceColumn === destColumn) {
-      const newCards = Array.from(sourceColumn.cards);
-      const [movedCard] = newCards.splice(source.index, 1);
-      newCards.splice(destination.index, 0, movedCard);
+        if (sourceColumn && destColumn) {
+          // Remove card from source column
+          const [movedCard] = sourceColumn.cards.splice(source.index, 1);
 
-      // Update card orders immutably
-      const updatedCards = newCards.map((card, index) => ({
-        ...card,
-        order: index,
-      }));
+          // Add card to destination column
+          destColumn.cards.splice(destination.index, 0, movedCard);
 
-      sourceColumn.cards = updatedCards;
-    }
-    // Moving from one column to another
-    else {
-      const sourceCards = Array.from(sourceColumn.cards);
-      const [movedCard] = sourceCards.splice(source.index, 1);
-      const destCards = Array.from(destColumn.cards);
+          // Update the board state immediately for responsive UI
+          setBoard(newBoard);
+        }
 
-      // Create a new card with ALL properties preserved plus the updated columnId
-      const updatedMovedCard = {
-        ...movedCard, // This preserves ALL card properties (title, description, etc.)
-        columnId: destColumn.id,
-      };
-
-      destCards.splice(destination.index, 0, updatedMovedCard);
-
-      // When updating order, make sure to preserve ALL card properties
-      const updatedSourceCards = sourceCards.map((card, index) => ({
-        ...card, // Keep all existing properties
-        order: index,
-      }));
-
-      const updatedDestCards = destCards.map((card, index) => ({
-        ...card, // Keep all existing properties
-        order: index,
-      }));
-
-      sourceColumn.cards = updatedSourceCards;
-      destColumn.cards = updatedDestCards;
-    }
-
-    setBoard(newBoard);
-
-    try {
-      const { data } = await moveCardMutation({
-        variables: {
-          boardId: board.id,
-          source: {
-            columnId: source.droppableId, // CHANGED FROM droppableId TO columnId
-            index: source.index,
+        // Call your moveCard mutation
+        const { data } = await moveCardMutation({
+          variables: {
+            boardId: board.id,
+            source: {
+              columnId: source.droppableId,
+              index: source.index,
+            },
+            destination: {
+              columnId: destination.droppableId,
+              index: destination.index,
+            },
           },
-          destination: {
-            columnId: destination.droppableId, // CHANGED FROM droppableId TO columnId
-            index: destination.index,
-          },
-        },
-      });
+        });
 
-      if (data?.moveCard) {
-        setBoard(data.moveCard);
+        if (data?.moveCard) {
+          // Get the server data
+          const serverData = data.moveCard;
+
+          // Create a map of columns by ID from server response
+          const serverColumnsMap = {};
+          if (serverData.columns) {
+            serverData.columns.forEach((col) => {
+              serverColumnsMap[col.id] = col;
+            });
+
+            // Create an ordered array of columns based on our saved order
+            const orderedColumns = columnOrder
+              .map((colId) => {
+                if (serverColumnsMap[colId]) {
+                  return serverColumnsMap[colId];
+                }
+                // Fallback to the column from prev board if not in server response
+                return prevBoard.columns.find((col) => col.id === colId);
+              })
+              .filter(Boolean);
+
+            // Set the board with preserved column order
+            const preservedBoard = {
+              ...serverData,
+              columns: orderedColumns,
+            };
+
+            setBoard(preservedBoard);
+          }
+        }
+      } catch (error) {
+        console.error("Error moving card:", error);
+        toast({
+          title: "Error moving card",
+          status: "error",
+        });
       }
-    } catch (error) {
-      handleError(error, toast);
-      refetch(); // Reload board to reset to server state
     }
   };
 
+  // These functions should be at component level, not inside handleDragEnd
   const handleAddColumn = async (title: string) => {
     if (!board || !title.trim()) return;
 
@@ -213,6 +253,13 @@ export default function BoardPage() {
 
       if (data?.addColumn) {
         setBoard(data.addColumn);
+
+        // Update column order with the new column
+        if (data.addColumn.columns) {
+          const newColIds = data.addColumn.columns.map((col) => col.id);
+          setColumnOrder(newColIds);
+        }
+
         toast({
           title: "List added",
           status: "success",
@@ -249,6 +296,11 @@ export default function BoardPage() {
     }
   };
 
+  // Add debug info to see if query is loading or if there's an error
+  console.log("Is loading:", isLoading);
+  console.log("Query error:", queryError);
+  console.log("Board ID from params:", boardId);
+
   if (isLoading) {
     return (
       <Flex justify="center" align="center" height="80vh">
@@ -257,10 +309,21 @@ export default function BoardPage() {
     );
   }
 
-  if (queryError || !board) {
+  if (queryError) {
     return (
       <Flex direction="column" align="center" justify="center" height="80vh">
-        <Text mb={4}>{queryError?.message || "Board not found"}</Text>
+        <Text mb={4}>Error: {queryError.message}</Text>
+        <Button onClick={() => refetch()}>Try Again</Button>
+      </Flex>
+    );
+  }
+
+  if (!board) {
+    return (
+      <Flex direction="column" align="center" justify="center" height="80vh">
+        <Text mb={4}>
+          Board not found. Check the console for debugging info.
+        </Text>
         <Button onClick={() => refetch()}>Try Again</Button>
       </Flex>
     );
@@ -318,7 +381,7 @@ export default function BoardPage() {
           <Droppable
             droppableId="all-columns"
             direction="horizontal"
-            type="COLUMN"
+            type="column"
           >
             {(provided) => (
               <Flex

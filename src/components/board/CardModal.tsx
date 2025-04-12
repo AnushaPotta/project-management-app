@@ -345,244 +345,250 @@ export default function CardModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="lg">
-      <ModalOverlay />
-      <ModalContent>
-        <ModalHeader p={4} pb={2}>
-          {isEditingTitle ? (
-            <FormControl isInvalid={!!titleError}>
-              <Input
-                ref={titleInputRef}
-                value={title}
-                onChange={(e) => {
-                  setTitle(e.target.value);
-                  if (e.target.value.trim()) setTitleError("");
-                }}
-                onBlur={handleTitleSubmit}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleTitleSubmit();
-                  if (e.key === "Escape") {
-                    setTitle(card.title);
-                    setIsEditingTitle(false);
-                  }
-                }}
-                placeholder="Enter card title"
-              />
-              {titleError && <FormErrorMessage>{titleError}</FormErrorMessage>}
-            </FormControl>
-          ) : (
-            <Text
-              fontSize="xl"
-              fontWeight="bold"
-              onClick={() => setIsEditingTitle(true)}
-              cursor="pointer"
-              _hover={{ bg: "gray.50" }}
-              p={1}
-              borderRadius="md"
-            >
-              {title}
-            </Text>
-          )}
-        </ModalHeader>
-        <ModalCloseButton />
-
-        <ModalBody>
-          <Flex direction="column" gap={4}>
-            {/* Labels section */}
-            {labels.length > 0 && (
-              <Box>
-                <Text mb={1} fontWeight="medium">
-                  Labels
-                </Text>
-                <Wrap spacing={2}>
-                  {labels.map((label) => {
-                    const labelInfo =
-                      LABEL_COLORS[label as keyof typeof LABEL_COLORS];
-                    return (
-                      <WrapItem key={label}>
-                        <Badge
-                          bg={labelInfo?.bg || "gray.500"}
-                          color={labelInfo?.color || "white"}
-                          px={2}
-                          py={1}
-                          borderRadius="md"
-                          fontSize="sm"
-                          cursor="pointer"
-                          onClick={() => toggleLabel(label)}
-                        >
-                          {labelInfo?.name || label}
-                        </Badge>
-                      </WrapItem>
-                    );
-                  })}
-                </Wrap>
-              </Box>
-            )}
-
-            {/* Due date section */}
-            {dueDate && (
-              <Box>
-                <Text mb={1} fontWeight="medium">
-                  Due Date
-                </Text>
-                <Badge
-                  colorScheme={isDueDatePast() ? "red" : "green"}
-                  display="flex"
-                  alignItems="center"
-                  px={2}
-                  py={1}
-                  borderRadius="md"
-                >
-                  <FiCalendar style={{ marginRight: "6px" }} />
-                  {formatDueDate(dueDate)}
-                </Badge>
-              </Box>
-            )}
-
-            {/* Description section */}
-            <Box>
-              <Text mb={1} fontWeight="medium">
-                Description
+    <div role="presentation">
+      <Modal isOpen={isOpen} onClose={onClose} size="lg">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader p={4} pb={2}>
+            {isEditingTitle ? (
+              <FormControl isInvalid={!!titleError}>
+                <Input
+                  ref={titleInputRef}
+                  value={title}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    if (e.target.value.trim()) setTitleError("");
+                  }}
+                  onBlur={handleTitleSubmit}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleTitleSubmit();
+                    if (e.key === "Escape") {
+                      setTitle(card.title);
+                      setIsEditingTitle(false);
+                    }
+                  }}
+                  placeholder="Enter card title"
+                />
+                {titleError && (
+                  <FormErrorMessage>{titleError}</FormErrorMessage>
+                )}
+              </FormControl>
+            ) : (
+              <Text
+                fontSize="xl"
+                fontWeight="bold"
+                onClick={() => setIsEditingTitle(true)}
+                cursor="pointer"
+                _hover={{ bg: "gray.50" }}
+                p={1}
+                borderRadius="md"
+              >
+                {title}
               </Text>
-              <Textarea
-                value={description}
-                onChange={handleDescriptionChange}
-                onBlur={handleDescriptionBlur}
-                placeholder="Add a more detailed description..."
-                minH="120px"
-                resize="vertical"
-              />
-            </Box>
-          </Flex>
-        </ModalBody>
+            )}
+          </ModalHeader>
+          <ModalCloseButton />
 
-        <Divider />
-
-        <ModalFooter justifyContent="space-between">
-          <HStack spacing={2}>
-            {/* Labels Popover */}
-            <Popover
-              isOpen={isLabelPopoverOpen}
-              onClose={() => setIsLabelPopoverOpen(false)}
-              placement="bottom-start"
-            >
-              <PopoverTrigger>
-                <Button
-                  leftIcon={<FiTag />}
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setIsLabelPopoverOpen(!isLabelPopoverOpen)}
-                >
-                  Labels
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent width="250px">
-                <PopoverArrow />
-                <PopoverHeader fontWeight="medium" py={2}>
-                  Labels
-                </PopoverHeader>
-                <PopoverBody>
-                  <Wrap spacing={1}>
-                    {Object.entries(LABEL_COLORS).map(
-                      ([key, { bg, color, name }]) => (
-                        <WrapItem key={key} width="100%">
-                          <Button
-                            width="100%"
-                            justifyContent="flex-start"
-                            height="30px"
-                            bg={bg}
-                            color={color}
-                            _hover={{ opacity: 0.8 }}
-                            leftIcon={
-                              labels.includes(key) ? <FiCheck /> : undefined
-                            }
-                            onClick={() => toggleLabel(key)}
+          <ModalBody>
+            <Flex direction="column" gap={4}>
+              {/* Labels section */}
+              {labels.length > 0 && (
+                <Box>
+                  <Text mb={1} fontWeight="medium">
+                    Labels
+                  </Text>
+                  <Wrap spacing={2}>
+                    {labels.map((label) => {
+                      const labelInfo =
+                        LABEL_COLORS[label as keyof typeof LABEL_COLORS];
+                      return (
+                        <WrapItem key={label}>
+                          <Badge
+                            bg={labelInfo?.bg || "gray.500"}
+                            color={labelInfo?.color || "white"}
+                            px={2}
+                            py={1}
+                            borderRadius="md"
+                            fontSize="sm"
+                            cursor="pointer"
+                            onClick={() => toggleLabel(label)}
                           >
-                            {name}
-                          </Button>
+                            {labelInfo?.name || label}
+                          </Badge>
                         </WrapItem>
-                      )
-                    )}
+                      );
+                    })}
                   </Wrap>
-                </PopoverBody>
-              </PopoverContent>
-            </Popover>
+                </Box>
+              )}
 
-            {/* Due Date Popover */}
-            <Popover
-              isOpen={isDueDatePopoverOpen}
-              onClose={() => setIsDueDatePopoverOpen(false)}
-              placement="bottom-start"
-            >
-              <PopoverTrigger>
-                <Button
-                  leftIcon={<FiCalendar />}
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setIsDueDatePopoverOpen(!isDueDatePopoverOpen)}
-                >
-                  Due Date
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent width="250px">
-                <PopoverArrow />
-                <PopoverHeader fontWeight="medium" py={2}>
-                  Due Date
-                </PopoverHeader>
-                <PopoverBody>
-                  <Input
-                    type="date"
-                    value={dueDate}
-                    onChange={handleDueDateChange}
-                    size="md"
-                  />
-                </PopoverBody>
-                <PopoverFooter display="flex" justifyContent="space-between">
-                  {dueDate && (
+              {/* Due date section */}
+              {dueDate && (
+                <Box>
+                  <Text mb={1} fontWeight="medium">
+                    Due Date
+                  </Text>
+                  <Badge
+                    colorScheme={isDueDatePast() ? "red" : "green"}
+                    display="flex"
+                    alignItems="center"
+                    px={2}
+                    py={1}
+                    borderRadius="md"
+                  >
+                    <FiCalendar style={{ marginRight: "6px" }} />
+                    {formatDueDate(dueDate)}
+                  </Badge>
+                </Box>
+              )}
+
+              {/* Description section */}
+              <Box>
+                <Text mb={1} fontWeight="medium">
+                  Description
+                </Text>
+                <Textarea
+                  value={description}
+                  onChange={handleDescriptionChange}
+                  onBlur={handleDescriptionBlur}
+                  placeholder="Add a more detailed description..."
+                  minH="120px"
+                  resize="vertical"
+                />
+              </Box>
+            </Flex>
+          </ModalBody>
+
+          <Divider />
+
+          <ModalFooter justifyContent="space-between">
+            <HStack spacing={2}>
+              {/* Labels Popover */}
+              <Popover
+                isOpen={isLabelPopoverOpen}
+                onClose={() => setIsLabelPopoverOpen(false)}
+                placement="bottom-start"
+              >
+                <PopoverTrigger>
+                  <Button
+                    leftIcon={<FiTag />}
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setIsLabelPopoverOpen(!isLabelPopoverOpen)}
+                  >
+                    Labels
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent width="250px">
+                  <PopoverArrow />
+                  <PopoverHeader fontWeight="medium" py={2}>
+                    Labels
+                  </PopoverHeader>
+                  <PopoverBody>
+                    <Wrap spacing={1}>
+                      {Object.entries(LABEL_COLORS).map(
+                        ([key, { bg, color, name }]) => (
+                          <WrapItem key={key} width="100%">
+                            <Button
+                              width="100%"
+                              justifyContent="flex-start"
+                              height="30px"
+                              bg={bg}
+                              color={color}
+                              _hover={{ opacity: 0.8 }}
+                              leftIcon={
+                                labels.includes(key) ? <FiCheck /> : undefined
+                              }
+                              onClick={() => toggleLabel(key)}
+                            >
+                              {name}
+                            </Button>
+                          </WrapItem>
+                        )
+                      )}
+                    </Wrap>
+                  </PopoverBody>
+                </PopoverContent>
+              </Popover>
+
+              {/* Due Date Popover */}
+              <Popover
+                isOpen={isDueDatePopoverOpen}
+                onClose={() => setIsDueDatePopoverOpen(false)}
+                placement="bottom-start"
+              >
+                <PopoverTrigger>
+                  <Button
+                    leftIcon={<FiCalendar />}
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      setIsDueDatePopoverOpen(!isDueDatePopoverOpen)
+                    }
+                  >
+                    Due Date
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent width="250px">
+                  <PopoverArrow />
+                  <PopoverHeader fontWeight="medium" py={2}>
+                    Due Date
+                  </PopoverHeader>
+                  <PopoverBody>
+                    <Input
+                      type="date"
+                      value={dueDate}
+                      onChange={handleDueDateChange}
+                      size="md"
+                    />
+                  </PopoverBody>
+                  <PopoverFooter display="flex" justifyContent="space-between">
+                    {dueDate && (
+                      <Button
+                        size="sm"
+                        leftIcon={<FiX />}
+                        variant="ghost"
+                        onClick={removeDueDate}
+                        colorScheme="red"
+                      >
+                        Remove
+                      </Button>
+                    )}
                     <Button
                       size="sm"
-                      leftIcon={<FiX />}
-                      variant="ghost"
-                      onClick={removeDueDate}
-                      colorScheme="red"
+                      colorScheme="blue"
+                      onClick={saveDueDate}
+                      isDisabled={!dueDate}
+                      ml="auto"
                     >
-                      Remove
+                      Save
                     </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    colorScheme="blue"
-                    onClick={saveDueDate}
-                    isDisabled={!dueDate}
-                    ml="auto"
-                  >
-                    Save
-                  </Button>
-                </PopoverFooter>
-              </PopoverContent>
-            </Popover>
-          </HStack>
+                  </PopoverFooter>
+                </PopoverContent>
+              </Popover>
+            </HStack>
 
-          <HStack spacing={2}>
-            <Button
-              colorScheme="red"
-              variant="ghost"
-              onClick={onDelete}
-              isLoading={isDeleting}
-              leftIcon={<FiTrash2 />}
-            >
-              Delete
-            </Button>
-            <Button
-              colorScheme="blue"
-              onClick={handleSaveCard}
-              isLoading={isSaving}
-            >
-              Save
-            </Button>
-          </HStack>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
+            <HStack spacing={2}>
+              <Button
+                colorScheme="red"
+                variant="ghost"
+                onClick={onDelete}
+                isLoading={isDeleting}
+                leftIcon={<FiTrash2 />}
+              >
+                Delete
+              </Button>
+              <Button
+                colorScheme="blue"
+                onClick={handleSaveCard}
+                isLoading={isSaving}
+              >
+                Save
+              </Button>
+            </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+    </div>
   );
 }

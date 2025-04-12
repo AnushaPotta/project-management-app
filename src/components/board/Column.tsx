@@ -57,10 +57,53 @@ export default function Column({
   const [updateColumnMutation] = useMutation(UPDATE_COLUMN_MUTATION);
   const [deleteColumnMutation] = useMutation(DELETE_COLUMN_MUTATION);
 
+  const findCardByProperties = (boardData, title, columnId) => {
+    for (const column of boardData.columns) {
+      if (column.id === columnId) {
+        return column.cards.find((card) => card.title === title);
+      }
+    }
+    return null;
+  };
+
   const handleAddCard = async () => {
     if (!newCardTitle.trim()) return;
 
     try {
+      // STEP 1: Get current board state from props or context
+      const currentBoard = board; // Access your current board state
+
+      // STEP 2: Create a new card (optimistic update)
+      const optimisticCardId = `temp-${Date.now()}`;
+      const newCard = {
+        id: optimisticCardId,
+        title: newCardTitle.trim(),
+        columnId: column.id,
+        createdAt: new Date().toISOString(),
+        // Add other default properties your cards have
+      };
+
+      // STEP 3: Create updated board with preserved column order
+      const updatedBoard = { ...currentBoard };
+
+      // Find the column index while maintaining the current order
+      const columnIndex = updatedBoard.columns.findIndex(
+        (col) => col.id === column.id
+      );
+
+      if (columnIndex !== -1) {
+        // Clone the columns array and update the specific column's cards
+        updatedBoard.columns = [...updatedBoard.columns];
+        updatedBoard.columns[columnIndex] = {
+          ...updatedBoard.columns[columnIndex],
+          cards: [...updatedBoard.columns[columnIndex].cards, newCard],
+        };
+
+        // STEP 4: Update UI immediately (optimistic update)
+        onBoardChange(updatedBoard);
+      }
+
+      // STEP 5: Make the API call
       const { data } = await addCardMutation({
         variables: {
           columnId: column.id,
@@ -70,8 +113,36 @@ export default function Column({
         },
       });
 
-      // Update the board with the returned data
-      onBoardChange(data.addCard);
+      // STEP 6: Merge the server response while preserving column order
+      if (data?.addCard) {
+        // Find the real card from the response that matches our temporary card
+        const serverCard = findCardByProperties(
+          data.addCard,
+          newCardTitle.trim(),
+          column.id
+        );
+
+        if (serverCard) {
+          // Update only that specific card in our current board state
+          const finalBoard = { ...updatedBoard };
+          const colIndex = finalBoard.columns.findIndex(
+            (col) => col.id === column.id
+          );
+
+          if (colIndex !== -1) {
+            const cardIndex = finalBoard.columns[colIndex].cards.findIndex(
+              (c) => c.id === optimisticCardId
+            );
+
+            if (cardIndex !== -1) {
+              // Replace our optimistic card with the real one from server
+              finalBoard.columns[colIndex].cards[cardIndex] = serverCard;
+              onBoardChange(finalBoard);
+            }
+          }
+        }
+      }
+
       setNewCardTitle("");
       setIsAddingCard(false);
 
@@ -92,7 +163,6 @@ export default function Column({
       });
     }
   };
-
   const updateColumnTitle = async () => {
     if (!columnTitle.trim()) {
       setColumnTitle(column.title); // Reset to original if empty

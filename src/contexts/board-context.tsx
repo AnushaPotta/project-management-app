@@ -150,20 +150,50 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
   const moveColumn = useCallback(
     async (sourceIndex: number, destinationIndex: number) => {
       if (!currentBoard) return;
-      const { data } = await moveColumnMutation({
-        variables: {
-          boardId: currentBoard.id,
-          sourceIndex,
-          destinationIndex,
-        },
-      });
-      setCurrentBoard((prev) =>
-        prev ? { ...prev, ...data.moveColumn } : null
+      
+      // Optimistically update the UI before the server response
+      const updatedColumns = [...currentBoard.columns];
+      const [movedColumn] = updatedColumns.splice(sourceIndex, 1);
+      updatedColumns.splice(destinationIndex, 0, movedColumn);
+      
+      // Update local state immediately for smoother UI
+      setCurrentBoard((prev) => 
+        prev ? { ...prev, columns: updatedColumns } : null
       );
+      
+      try {
+        // Then send the mutation to the server
+        const { data } = await moveColumnMutation({
+          variables: {
+            boardId: currentBoard.id,
+            sourceIndex,
+            destinationIndex,
+          },
+          optimisticResponse: {
+            __typename: "Mutation",
+            moveColumn: {
+              __typename: "Board",
+              id: currentBoard.id,
+              columns: updatedColumns.map(col => ({
+                __typename: "Column",
+                ...col
+              }))
+            }
+          }
+        });
+        
+        // Update with the server response data if needed
+        setCurrentBoard((prev) =>
+          prev ? { ...prev, ...data.moveColumn } : null
+        );
+      } catch (error) {
+        // If there's an error, revert to the original state
+        console.error("Error moving column:", error);
+        setCurrentBoard(currentBoard);
+      }
     },
     [currentBoard, moveColumnMutation]
   );
-
   // Card operations
   const addCard = useCallback(
     async (columnId: string, cardData: CardInput) => {
@@ -217,14 +247,83 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
   const moveCard = useCallback(
     async (source: DragItem, destination: DragItem) => {
       if (!currentBoard) return;
-      const { data } = await moveCardMutation({
-        variables: {
-          boardId: currentBoard.id,
-          source,
-          destination,
-        },
-      });
-      setCurrentBoard((prev) => (prev ? { ...prev, ...data.moveCard } : null));
+
+      // Create a deep copy of the current board columns for optimistic update
+      const updatedColumns = JSON.parse(JSON.stringify(currentBoard.columns));
+      
+      // Find the source and destination column indices
+      const sourceColumnIndex = updatedColumns.findIndex(
+        (col) => col.id === source.columnId
+      );
+      const destColumnIndex = updatedColumns.findIndex(
+        (col) => col.id === destination.columnId
+      );
+      
+      if (sourceColumnIndex === -1 || destColumnIndex === -1) {
+        console.error("Source or destination column not found");
+        return;
+      }
+      
+      // Get the card to move
+      const cardToMove = updatedColumns[sourceColumnIndex].cards[source.index];
+      if (!cardToMove) {
+        console.error("Card not found at source index");
+        return;
+      }
+      
+      // Remove the card from source
+      updatedColumns[sourceColumnIndex].cards.splice(source.index, 1);
+      
+      // Add the card to destination
+      updatedColumns[destColumnIndex].cards.splice(destination.index, 0, cardToMove);
+      
+      // Update local state immediately for a smooth UI experience
+      setCurrentBoard((prev) => 
+        prev ? { ...prev, columns: updatedColumns } : null
+      );
+      
+      try {
+        // Then send the mutation to the server
+        const { data } = await moveCardMutation({
+          variables: {
+            boardId: currentBoard.id,
+            source,
+            destination,
+          },
+          optimisticResponse: {
+            __typename: "Mutation",
+            moveCard: {
+              __typename: "Board",
+              id: currentBoard.id,
+              title: currentBoard.title,
+              description: currentBoard.description,
+              background: currentBoard.background,
+              isStarred: currentBoard.isStarred,
+              createdAt: currentBoard.createdAt,
+              updatedAt: currentBoard.updatedAt,
+              members: currentBoard.members.map(member => ({
+                __typename: "Member",
+                ...member
+              })),
+              columns: updatedColumns.map(col => ({
+                __typename: "Column",
+                ...col,
+                cards: col.cards.map(card => ({
+                  __typename: "Card",
+                  ...card
+                }))
+              }))
+            }
+          }
+        });
+        
+        // Update with the server response data
+        setCurrentBoard((prev) => (prev ? { ...prev, ...data.moveCard } : null));
+      } catch (error) {
+        console.error("Error moving card:", error);
+        // Revert to original state if there's an error
+        setCurrentBoard(currentBoard);
+      }
     },
     [currentBoard, moveCardMutation]
   );

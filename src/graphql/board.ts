@@ -196,10 +196,17 @@ export const MOVE_COLUMN = gql`
       destinationIndex: $destinationIndex
     ) {
       id
+      title
       columns {
         id
         title
         order
+        cards {
+          id
+          title
+          description
+          order
+        }
       }
     }
   }

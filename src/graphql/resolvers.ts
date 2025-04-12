@@ -1090,7 +1090,6 @@ export const resolvers = {
         throw new Error("Failed to move card");
       }
     },
-
     // Invite a member to a board - UPDATED to manage memberIds
     inviteMember: async (_, { boardId, email }, { user }) => {
       try {
@@ -1245,7 +1244,78 @@ export const resolvers = {
         throw new Error("Failed to remove member");
       }
     },
+
+    // Move a column within a board
+    moveColumn: async (_, { boardId, sourceIndex, destinationIndex }, { user }) => {
+      try {
+        if (!user) {
+          throw new Error("Not authenticated");
+        }
+
+        const boardRef = adminDb.collection("boards").doc(boardId);
+        const boardSnap = await boardRef.get();
+
+        if (!boardSnap.exists) {
+          throw new Error("Board not found");
+        }
+
+        const boardData = boardSnap.data();
+        if (!boardData) {
+          throw new Error("Board data is missing");
+        }
+
+        // Check if user is a member of this board
+        if (!boardData.memberIds || !boardData.memberIds.includes(user.uid)) {
+          throw new Error("Not authorized to modify this board");
+        }
+
+        const columns = [...boardData.columns || []];
+        
+        if (sourceIndex < 0 || sourceIndex >= columns.length || 
+            destinationIndex < 0 || destinationIndex >= columns.length) {
+          throw new Error("Invalid source or destination index");
+        }
+
+        // Move the column
+        const [movedColumn] = columns.splice(sourceIndex, 1);
+        columns.splice(destinationIndex, 0, movedColumn);
+
+        // Update the order property of each column
+        const updatedColumns = columns.map((column, index) => ({
+          ...column,
+          order: index
+        }));
+
+        // Update the board
+        await boardRef.update({
+          columns: updatedColumns,
+          updatedAt: firestore.Timestamp.now()
+        });
+
+        /*await logActivity({
+          type: "COLUMN_MOVED",
+          boardId,
+          userId: user.uid,
+          metadata: {
+            columnTitle: movedColumn.title,
+            sourceIndex,
+            destinationIndex
+          }
+        });*/
+
+        return {
+          id: boardId,
+          ...boardData,
+          columns: updatedColumns
+        };
+      } catch (error) {
+        console.error("Error moving column:", error);
+        throw new Error("Failed to move column");
+      }
+    },
   },
+
+
 };
 
 export default resolvers;
