@@ -104,13 +104,13 @@ export default function Navbar() {
               <MenuList>
                 <MenuItem
                   icon={<FiSettings />}
-                  onClick={() => router.push("/settings/profile")}
+                  onClick={() => router.push("/settings?tab=profile")}
                 >
                   Profile Settings
                 </MenuItem>
                 <MenuItem
                   icon={<FiSettings />}
-                  onClick={() => router.push("/settings/workspace")}
+                  onClick={() => router.push("/settings?tab=workspace")}
                 >
                   Workspace Settings
                 </MenuItem>

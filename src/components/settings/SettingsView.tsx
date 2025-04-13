@@ -38,6 +38,7 @@ import {
   FiLock,
   FiUpload,
 } from "react-icons/fi";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface User {
   uid: string;
@@ -53,6 +54,9 @@ interface SettingsViewProps {
 
 export default function SettingsView({ user }: SettingsViewProps) {
   const toast = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
   const { colorMode, toggleColorMode } = useColorMode();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [profileForm, setProfileForm] = useState({
@@ -66,6 +70,32 @@ export default function SettingsView({ user }: SettingsViewProps) {
     teamUpdates: true,
     systemAnnouncements: false,
   });
+
+  // Determine which tab to show based on URL param
+  const getTabIndex = () => {
+    switch(tabParam) {
+      case 'profile': return 0;
+      case 'appearance': return 1;
+      case 'notifications': return 2;
+      case 'account': return 3;
+      case 'workspace': return 4;
+      default: return 0; // Default to profile tab
+    }
+  };
+
+  // Handle tab change by updating URL
+  const handleTabChange = (index: number) => {
+    let tab;
+    switch(index) {
+      case 0: tab = 'profile'; break;
+      case 1: tab = 'appearance'; break;
+      case 2: tab = 'notifications'; break;
+      case 3: tab = 'account'; break;
+      case 4: tab = 'workspace'; break;
+      default: tab = 'profile';
+    }
+    router.push(`/settings?tab=${tab}`);
+  };
 
   const cardBg = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.700");
@@ -134,12 +164,18 @@ export default function SettingsView({ user }: SettingsViewProps) {
 
   return (
     <Box>
-      <Tabs colorScheme="blue" variant="enclosed">
+      <Tabs 
+        colorScheme="blue" 
+        variant="enclosed" 
+        index={getTabIndex()} 
+        onChange={handleTabChange}
+      >
         <TabList>
           <Tab><Flex align="center"><Box as={FiUser} mr={2} />Profile</Flex></Tab>
           <Tab><Flex align="center"><Box as={colorMode === 'dark' ? FiSun : FiMoon} mr={2} />Appearance</Flex></Tab>
           <Tab><Flex align="center"><Box as={FiBell} mr={2} />Notifications</Flex></Tab>
           <Tab><Flex align="center"><Box as={FiLock} mr={2} />Account</Flex></Tab>
+          <Tab><Flex align="center"><Box as={FiLock} mr={2} />Workspace</Flex></Tab>
         </TabList>
 
         <TabPanels>
@@ -382,6 +418,30 @@ export default function SettingsView({ user }: SettingsViewProps) {
                   <Box>
                     <Heading size="sm" color="red.500" mb={4}>Danger Zone</Heading>
                     <Button colorScheme="red" variant="outline">Delete Account</Button>
+                  </Box>
+                </VStack>
+              </CardBody>
+            </Card>
+          </TabPanel>
+          
+          {/* Workspace Tab */}
+          <TabPanel>
+            <Card bg={cardBg} borderColor={borderColor} borderWidth="1px" shadow="sm">
+              <CardHeader>
+                <Heading size="md">Workspace Settings</Heading>
+              </CardHeader>
+              <CardBody>
+                <VStack spacing={6} align="stretch">
+                  <Box>
+                    <Heading size="sm" mb={4}>Workspace Name</Heading>
+                    <Input placeholder="Enter workspace name" />
+                  </Box>
+                  
+                  <Divider />
+                  
+                  <Box>
+                    <Heading size="sm" mb={4}>Workspace Description</Heading>
+                    <Input placeholder="Enter workspace description" />
                   </Box>
                 </VStack>
               </CardBody>
