@@ -50,6 +50,10 @@ export default function DashboardSidebar() {
   const bgColor = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.700");
 
+  const handleLogoClick = () => {
+    router.push('/');
+  };
+
   return (
     <Box
       borderRight="1px"
@@ -62,7 +66,14 @@ export default function DashboardSidebar() {
       top={0}
     >
       <VStack align="center" mb={6}>
-        <Text fontSize="2xl" fontWeight="bold">
+        <Text 
+          fontSize="2xl" 
+          fontWeight="bold"
+          cursor="pointer"
+          _hover={{ color: "blue.500" }}
+          transition="color 0.2s"
+          onClick={handleLogoClick}
+        >
           TaskFlow
         </Text>
       </VStack>

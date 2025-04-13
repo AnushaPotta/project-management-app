@@ -129,23 +129,22 @@ function HomeContent() {
             </Button>
           </VStack>
 
-          <Box
-            flex={1}
-            position="relative"
-            height="400px"
-            width="100%"
-            rounded="2xl"
-            overflow="hidden"
-            shadow="2xl"
-          >
-            <Image
-              src="/dashboard-preview.png"
-              alt="TaskFlow Dashboard Preview"
-              fill
-              style={{ objectFit: "contain" }}
-              priority
-            />
-          </Box>
+         <Box 
+  borderRadius="md" 
+  overflow="hidden" 
+  boxShadow="lg" 
+  my={8}
+  transition="transform 0.3s, box-shadow 0.3s"
+  _hover={{ transform: 'translateY(-5px)', boxShadow: 'xl' }}
+>
+  <Image 
+    src="/images/dashboard-preview.png" 
+    alt="TaskFlow Dashboard Preview" 
+    width={800}
+    height={450}
+    style={{ width: '100%', height: 'auto' }}
+  />
+</Box> 
         </Flex>
       </Container>
 
