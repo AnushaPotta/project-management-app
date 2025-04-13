@@ -58,7 +58,7 @@ function DashboardContent() {
 
       const newBoard = createData.createBoard;
       setCurrentBoard(newBoard);
-      router.push(`/board/${newBoard.id}`);
+      router.push(`/boards/${newBoard.id}`);
 
       toast({
         title: "Board created",
@@ -73,7 +73,7 @@ function DashboardContent() {
 
   const handleBoardClick = (board: Board) => {
     setCurrentBoard(board);
-    router.push(`/board/${board.id}`);
+    router.push(`/boards/${board.id}`);
   };
 
   const { data, loading, error } = useQuery(GET_USER_BOARDS, {
@@ -148,9 +148,7 @@ function DashboardContent() {
 
       {/* Board list */}
       <Box mt={8}>
-        <Heading size="md" mb={4}>
-          Your Boards
-        </Heading>
+
         <BoardList
           boards={data?.boards || []}
           onBoardClick={handleBoardClick}
