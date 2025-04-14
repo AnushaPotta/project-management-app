@@ -7,6 +7,7 @@ export const GET_USER_BOARDS = gql`
       id
       title
       description
+      isStarred
       createdAt
       updatedAt
       columns {

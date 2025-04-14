@@ -1,5 +1,5 @@
 // src/components/settings/SettingsView.tsx
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Box,
   Text,
@@ -71,6 +71,11 @@ export default function SettingsView({ user }: SettingsViewProps) {
     systemAnnouncements: false,
   });
 
+  // Image upload state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+
   // Determine which tab to show based on URL param
   const getTabIndex = () => {
     switch(tabParam) {
@@ -112,6 +117,53 @@ export default function SettingsView({ user }: SettingsViewProps) {
     }));
   };
 
+  // Handle image selection
+  const handleImageSelect = () => {
+    fileInputRef.current?.click();
+  };
+
+  // Handle file change
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid file type",
+        description: "Please select an image file",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+    
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Image must be less than 5MB",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+    
+    setSelectedImage(file);
+    const imageUrl = URL.createObjectURL(file);
+    setImagePreview(imageUrl);
+    
+    toast({
+      title: "Image selected",
+      description: "Click Save Changes to update your profile",
+      status: "success",
+      duration: 3000,
+      isClosable: true,
+    });
+  };
+
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -119,6 +171,14 @@ export default function SettingsView({ user }: SettingsViewProps) {
       // Here you would update the user profile
       // For now, just simulate a delay
       await new Promise((resolve) => setTimeout(resolve, 1000));
+      
+      // If there's a selected image, you would upload it here
+      // In a real app, this is where you'd upload to Firebase Storage
+      if (selectedImage) {
+        // Image upload simulation
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      
       toast({
         title: "Profile updated",
         status: "success",
@@ -195,16 +255,22 @@ export default function SettingsView({ user }: SettingsViewProps) {
                     <Avatar 
                       size="xl" 
                       name={profileForm.name} 
-                      src={user?.photoURL} 
+                      src={imagePreview || user?.photoURL} 
                       mb={{ base: 4, md: 0 }}
                       mr={{ md: 6 }}
                     />
                     <Box textAlign={{ base: "center", md: "left" }}>
                       <Heading size="sm" mb={2}>Profile Picture</Heading>
                       <Text mb={3} color="gray.500">Upload a new profile picture</Text>
-                      <Button leftIcon={<FiUpload />} size="sm">
+                      <Button leftIcon={<FiUpload />} size="sm" onClick={handleImageSelect}>
                         Upload Image
                       </Button>
+                      <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleFileChange} 
+                        style={{ display: 'none' }} 
+                      />
                     </Box>
                   </Flex>
                   

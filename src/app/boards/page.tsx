@@ -203,22 +203,15 @@ export default function BoardsPage() {
   };
 
   const renderBoardList = () => {
+    const boards = data?.boards || [];
+
     if (boards.length === 0) {
       return (
-        <Box
-          textAlign="center"
-          p={10}
-          borderRadius="md"
-          bg={bgColor}
-          borderWidth="1px"
-          borderColor={borderColor}
-        >
-          <Text fontSize="lg" mb={4}>
-            You don&apos;t have any boards yet
-          </Text>
-          <Text mb={6} color="gray.500">
-            Create your first board to get started with your projects
-          </Text>
+        <Box textAlign="center" py={10}>
+          <Heading size="md" mb={4}>
+            No boards yet
+          </Heading>
+          <Text mb={6}>Create your first board to get started</Text>
           <Button
             colorScheme="blue"
             leftIcon={<FiPlus />}
@@ -230,81 +223,107 @@ export default function BoardsPage() {
       );
     }
 
+    // Separate boards into starred and regular
+    const starredBoards = boards.filter((board) => board.isStarred);
+    const regularBoards = boards.filter((board) => !board.isStarred);
+
+    // Board card renderer function to avoid code duplication
+    const renderBoardCard = (board: Board) => (
+      <Box
+        as={Link}
+        href={`/boards/${board.id}`}
+        key={board.id}
+        p={5}
+        borderWidth="1px"
+        borderRadius="md"
+        borderColor={borderColor}
+        bg={bgColor}
+        _hover={{
+          bg: hoverBgColor,
+          transform: "translateY(-2px)",
+          boxShadow: "md",
+          transition: "all 0.2s ease-in-out",
+        }}
+        transition="all 0.2s"
+        height="160px"
+        position="relative"
+      >
+        <Heading size="md" mb={2} noOfLines={1}>
+          {board.title}
+        </Heading>
+
+        {board.description && (
+          <Text color="gray.500" noOfLines={2} mb={4}>
+            {board.description}
+          </Text>
+        )}
+
+        <Text
+          fontSize="sm"
+          color="gray.500"
+          position="absolute"
+          bottom="5"
+          left="5"
+        >
+          {board.columns?.length || 0} columns •{" "}
+          {board.columns?.reduce(
+            (count, col) => count + (col.cards?.length || 0),
+            0
+          ) || 0}{" "}
+          cards
+        </Text>
+
+        {board.isStarred && (
+          <Box position="absolute" top="3" right="3" color="yellow.400">
+            ★
+          </Box>
+        )}
+      </Box>
+    );
+
     return (
-      <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={5}>
-        {boards.map((board) => (
-          <Box
-            as={Link}
-            href={`/boards/${board.id}`}
-            key={board.id}
+      <Box>
+        {/* Starred Boards Section */}
+        {starredBoards.length > 0 && (
+          <>
+            <Flex align="center" mt={6} mb={4}>
+              <Box color="yellow.400" mr={2}>★</Box>
+              <Heading size="md">Starred Boards</Heading>
+            </Flex>
+            <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={5} mb={8}>
+              {starredBoards.map((board) => renderBoardCard(board))}
+            </SimpleGrid>
+          </>
+        )}
+
+        {/* Regular Boards Section */}
+        <Heading size="md" mb={4} mt={6}>
+          {starredBoards.length > 0 ? "All Boards" : "Your Boards"}
+        </Heading>
+        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={5}>
+          {regularBoards.map((board) => renderBoardCard(board))}
+
+          <Flex
+            justify="center"
+            align="center"
             p={5}
             borderWidth="1px"
             borderRadius="md"
+            borderStyle="dashed"
             borderColor={borderColor}
             bg={bgColor}
-            _hover={{
-              bg: hoverBgColor,
-              transform: "translateY(-2px)",
-              boxShadow: "md",
-              transition: "all 0.2s ease-in-out",
-            }}
-            transition="all 0.2s"
+            _hover={{ bg: hoverBgColor }}
+            cursor="pointer"
             height="160px"
-            position="relative"
+            onClick={() => setIsCreateModalOpen(true)}
           >
-            <Heading size="md" mb={2} noOfLines={1}>
-              {board.title}
-            </Heading>
-
-            {board.description && (
-              <Text color="gray.500" noOfLines={2} mb={4}>
-                {board.description}
-              </Text>
-            )}
-
-            <Text
-              fontSize="sm"
-              color="gray.500"
-              position="absolute"
-              bottom="5"
-              left="5"
-            >
-              {board.columns?.length || 0} columns •{" "}
-              {board.columns?.reduce(
-                (count, col) => count + (col.cards?.length || 0),
-                0
-              ) || 0}{" "}
-              cards
-            </Text>
-
-            {board.isStarred && (
-              <Box position="absolute" top="3" right="3" color="yellow.400">
-                ★
-              </Box>
-            )}
-          </Box>
-        ))}
-
-        <Flex
-          justify="center"
-          align="center"
-          p={5}
-          borderWidth="1px"
-          borderRadius="md"
-          borderStyle="dashed"
-          borderColor={borderColor}
-          bg={bgColor}
-          _hover={{ bg: hoverBgColor }}
-          cursor="pointer"
-          height="160px"
-          onClick={() => setIsCreateModalOpen(true)}
-        >
-          <Flex direction="column" align="center">
-            <Icon as={FiPlus} w={8} h={8} mb={3} />
-            <Text fontWeight="medium">Create New Board</Text>
+            <Flex direction="column" align="center">
+              <Icon as={FiPlus} w={8} h={8} mb={3} />
+              <Text fontWeight="medium">Create New Board</Text>
+            </Flex>
           </Flex>
-        </Flex>
-      </SimpleGrid>
+        </SimpleGrid>
+      </Box>
     );
   };
 

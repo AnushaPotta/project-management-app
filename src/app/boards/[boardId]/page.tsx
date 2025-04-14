@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   Box,
   Flex,
@@ -29,6 +29,7 @@ import AddColumnModal from "@/components/board/AddColumnModal";
 
 export default function BoardPage() {
   const { boardId } = useParams();
+  const router = useRouter();
   const [board, setBoard] = useState<Board | null>(null);
   const [isAddColumnModalOpen, setIsAddColumnModalOpen] = useState(false);
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
@@ -382,6 +383,7 @@ export default function BoardPage() {
           aria-label="Board settings"
           icon={<FiSettings />}
           variant="ghost"
+          onClick={() => router.push(`/settings?tab=workspace`)}
         />
       </Flex>
 
