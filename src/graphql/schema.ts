@@ -115,10 +115,23 @@ type DeadlineCard {
   columnTitle: String!
 }
 
+type SearchResult {
+  id: ID!
+  type: String!  # "board" or "task"
+  title: String!
+  boardId: ID
+  boardTitle: String
+  columnId: ID
+  columnTitle: String
+  dueDate: String
+  description: String
+}
+
 extend type Query {
   taskStats: TaskStats!
   recentActivity(limit: Int, cursor: String): [ActivityItem!]!
   upcomingDeadlines(days: Int): [DeadlineCard!]!
+  search(query: String!): [SearchResult!]!
 }
 
 

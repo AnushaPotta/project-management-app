@@ -8,8 +8,12 @@ import {
   VStack,
   Heading,
   Badge,
+  Icon,
+  Flex,
+  IconButton,
 } from "@chakra-ui/react";
 import { AddIcon } from "@chakra-ui/icons";
+import { FiStar } from "react-icons/fi";
 import { CreateBoardModal } from "./CreateBoardModal";
 import { Board } from "@/types/board";
 
@@ -103,14 +107,26 @@ export function BoardList({
               borderRadius="lg"
               bg="white"
               cursor="pointer"
-              onClick={() => onBoardClick(board)}
+              position="relative"
               _hover={{
                 transform: "translateY(-2px)",
                 shadow: "md",
                 borderColor: "brand.500",
               }}
               transition="all 0.2s"
+              onClick={() => onBoardClick(board)}
             >
+              {board.isStarred && (
+                <Box
+                  position="absolute"
+                  top={2}
+                  right={2}
+                  color="yellow.400"
+                  fontSize="lg"
+                >
+                  <Icon as={FiStar} fill="currentColor" />
+                </Box>
+              )}
               <Text fontSize="xl" fontWeight="bold" mb={2}>
                 {board.title}
               </Text>

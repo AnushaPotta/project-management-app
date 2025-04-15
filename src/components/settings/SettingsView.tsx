@@ -39,6 +39,7 @@ import {
   FiUpload,
 } from "react-icons/fi";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useAuth } from "@/contexts/auth-context";
 
 interface User {
   uid: string;
@@ -58,6 +59,7 @@ export default function SettingsView({ user }: SettingsViewProps) {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
   const { colorMode, toggleColorMode } = useColorMode();
+  const { updateProfile } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [profileForm, setProfileForm] = useState({
     name: user?.displayName || user?.name || "",
@@ -168,16 +170,11 @@ export default function SettingsView({ user }: SettingsViewProps) {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      // Here you would update the user profile
-      // For now, just simulate a delay
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      
-      // If there's a selected image, you would upload it here
-      // In a real app, this is where you'd upload to Firebase Storage
-      if (selectedImage) {
-        // Image upload simulation
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
+      // Update Firebase Auth profile
+      await updateProfile({
+        displayName: profileForm.name,
+        photoURL: imagePreview || user?.photoURL,
+      });
       
       toast({
         title: "Profile updated",

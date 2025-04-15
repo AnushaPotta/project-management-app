@@ -17,7 +17,7 @@ import {
 } from "@chakra-ui/react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
-import { FiPlus, FiHome, FiSettings, FiLogOut } from "react-icons/fi";
+import { FiPlus, FiSettings, FiLogOut, FiLayout } from "react-icons/fi";
 import { FirebaseError } from "firebase/app";
 
 export default function Navbar() {
@@ -66,8 +66,8 @@ export default function Navbar() {
         {user && (
           <Flex justify="center" flex={1}>
             <IconButton
-              aria-label="Home"
-              icon={<FiHome />}
+              aria-label="Dashboard"
+              icon={<FiLayout />}
               variant="ghost"
               onClick={() => router.push("/dashboard")}
             />

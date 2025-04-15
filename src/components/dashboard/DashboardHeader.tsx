@@ -31,17 +31,38 @@ import {
   List,
   ListItem,
   ListIcon,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverBody,
+  PopoverHeader,
+  PopoverFooter,
+  Spinner,
+  VStack,
 } from "@chakra-ui/react";
-import { FiSearch, FiBell, FiHelpCircle, FiSettings, FiCheckCircle, FiInfo, FiBookOpen, FiCode, FiMessageSquare } from "react-icons/fi";
+import { FiSearch, FiBell, FiHelpCircle, FiSettings, FiCheckCircle, FiInfo, FiBookOpen, FiCode, FiMessageSquare, FiFile, FiCheck } from "react-icons/fi";
 import { useAuth } from "@/contexts/auth-context";
 import { useRouter } from "next/navigation";
-import NextLink from "next/link";
+import { useState, useRef, useEffect } from "react";
+import { useLazyQuery } from "@apollo/client";
+import { SEARCH_QUERY } from "@/graphql/search";
 
 export default function DashboardHeader() {
   const { user } = useAuth();
   const router = useRouter();
   const bgColor = useColorModeValue("white", "gray.800");
   const notificationBg = useColorModeValue("gray.50", "gray.700");
+  const hoverBg = useColorModeValue("gray.50", "gray.700");
+  
+  // Search functionality
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const { isOpen: isSearchOpen, onOpen: onSearchOpen, onClose: onSearchClose } = useDisclosure();
+  
+  const [executeSearch, { loading: isSearching, data: searchData }] = useLazyQuery(
+    SEARCH_QUERY, 
+    { fetchPolicy: "network-only" }
+  );
   
   // Help drawer controls
   const { 
@@ -79,6 +100,40 @@ export default function DashboardHeader() {
   const handleSettingsClick = () => {
     router.push("/settings");
   };
+  
+  // Handle search
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    
+    if (query.length > 2) {
+      onSearchOpen();
+      executeSearch({ variables: { query } });
+    } else {
+      onSearchClose();
+    }
+  };
+  
+  // Focus search input with keyboard shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+/ or Command+/ shortcut for search
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+  
+  // Navigate to search result
+  const handleSearchResultClick = (path: string) => {
+    router.push(path);
+    setSearchQuery("");
+    onSearchClose();
+  };
 
   return (
     <Box
@@ -91,12 +146,89 @@ export default function DashboardHeader() {
       zIndex={10}
     >
       <Flex justify="space-between" align="center">
-        <InputGroup maxW="400px">
-          <InputLeftElement pointerEvents="none">
-            <FiSearch color="gray.300" />
-          </InputLeftElement>
-          <Input placeholder="Search..." borderRadius="full" />
-        </InputGroup>
+        <Popover
+          isOpen={isSearchOpen && searchQuery.length > 2}
+          onClose={onSearchClose}
+          placement="bottom-start"
+          autoFocus={false}
+          closeOnBlur={true}
+          gutter={4}
+        >
+          <PopoverTrigger>
+            <InputGroup maxW="400px">
+              <InputLeftElement pointerEvents="none">
+                <FiSearch color="gray.300" />
+              </InputLeftElement>
+              <Input 
+                placeholder="Search boards and tasks... (Ctrl+/)" 
+                borderRadius="full"
+                value={searchQuery}
+                onChange={handleSearchChange}
+                ref={searchRef}
+              />
+            </InputGroup>
+          </PopoverTrigger>
+          <PopoverContent 
+            w="400px" 
+            maxH="400px" 
+            overflowY="auto" 
+            shadow="lg"
+            borderRadius="md"
+          >
+            <PopoverHeader fontWeight="semibold" borderBottomWidth="1px">
+              {isSearching ? 'Searching...' : `Results for "${searchQuery}"`}
+            </PopoverHeader>
+            <PopoverBody p={0}>
+              {isSearching ? (
+                <Flex py={4} justify="center" align="center">
+                  <Spinner size="sm" mr={2} />
+                  <Text>Searching...</Text>
+                </Flex>
+              ) : searchData && searchData.search.length === 0 ? (
+                <Box py={4} textAlign="center">
+                  <Text>No results found</Text>
+                </Box>
+              ) : searchData && (
+                <VStack align="stretch" spacing={0} divider={<Divider />}>
+                  {searchData.search.map(result => (
+                    <Box 
+                      key={`${result.type}-${result.id}`}
+                      p={3}
+                      cursor="pointer"
+                      _hover={{ bg: hoverBg }}
+                      onClick={() => handleSearchResultClick(
+                        result.type === 'board' 
+                          ? `/boards/${result.id}` 
+                          : `/boards/${result.boardId}?task=${result.id}`
+                      )}
+                    >
+                      <Flex align="center">
+                        <Box 
+                          as={result.type === 'board' ? FiFile : FiCheck} 
+                          mr={3}
+                          color={result.type === 'board' ? 'blue.500' : 'green.500'}
+                        />
+                        <Box>
+                          <Text fontWeight="medium">{result.title}</Text>
+                          {result.type === 'task' && (
+                            <Text fontSize="sm" color="gray.500">
+                              {result.boardTitle} • {result.columnTitle}
+                            </Text>
+                          )}
+                        </Box>
+                      </Flex>
+                    </Box>
+                  ))}
+                </VStack>
+              )}
+            </PopoverBody>
+            {searchData && searchData.search.length > 0 && (
+              <PopoverFooter borderTopWidth="1px" fontSize="sm" py={2} textAlign="center">
+                <Text color="gray.500">Press Enter to see all results</Text>
+              </PopoverFooter>
+            )}
+          </PopoverContent>
+        </Popover>
 
         <HStack spacing={4}>
           {/* Notifications Menu */}
@@ -144,20 +276,22 @@ export default function DashboardHeader() {
                     p={3} 
                     borderBottomWidth="1px"
                     bg={!notification.read ? notificationBg : undefined}
+                    cursor="pointer"
+                    _hover={{ bg: notificationBg }}
                   >
                     <Text fontWeight={!notification.read ? "bold" : "normal"}>{notification.title}</Text>
-                    <Text fontSize="sm" color="gray.500" mt={1}>{notification.description}</Text>
-                    <Text fontSize="xs" color="gray.500" mt={2}>{notification.time}</Text>
+                    <Text fontSize="sm" color="gray.600" mt={1}>{notification.description}</Text>
+                    <Text fontSize="xs" color="gray.500" mt={1}>{notification.time}</Text>
                   </Box>
                 ))
               )}
-              <Box p={2} textAlign="center">
-                <Text fontSize="sm" color="blue.500" cursor="pointer">See all notifications</Text>
+              <Box p={3} textAlign="center">
+                <Text fontSize="sm" color="blue.500" cursor="pointer">View all notifications</Text>
               </Box>
             </MenuList>
           </Menu>
 
-          {/* Help Button */}
+          {/* Help Menu */}
           <IconButton
             aria-label="Help"
             icon={<FiHelpCircle />}
@@ -166,7 +300,7 @@ export default function DashboardHeader() {
             onClick={onHelpOpen}
           />
 
-          {/* Settings Button */}
+          {/* Settings */}
           <IconButton
             aria-label="Settings"
             icon={<FiSettings />}
@@ -175,41 +309,41 @@ export default function DashboardHeader() {
             onClick={handleSettingsClick}
           />
 
+          {/* User Menu */}
           <Menu>
-            <MenuButton>
-              <Avatar
-                size="sm"
-                name={user?.displayName || user?.email || undefined}
-                src={user?.photoURL || undefined}
-              />
-            </MenuButton>
+            <MenuButton as={Avatar} size="sm" name={user?.displayName || ""} src={user?.photoURL || ""} cursor="pointer" />
             <MenuList>
-              <MenuItem as={NextLink} href="/settings">Profile</MenuItem>
-              <MenuItem as={NextLink} href="/settings">Account Settings</MenuItem>
-              <MenuItem>Sign Out</MenuItem>
+              <MenuItem onClick={() => router.push('/settings?tab=profile')}>Profile</MenuItem>
+              <MenuItem onClick={() => router.push('/settings?tab=appearance')}>Appearance</MenuItem>
+              <MenuItem onClick={() => router.push("/settings")}>Settings</MenuItem>
             </MenuList>
           </Menu>
         </HStack>
       </Flex>
 
       {/* Help Drawer */}
-      <Drawer isOpen={isHelpOpen} placement="right" onClose={onHelpClose} size="md">
+      <Drawer
+        isOpen={isHelpOpen}
+        placement="right"
+        onClose={onHelpClose}
+        size="md"
+      >
         <DrawerOverlay />
         <DrawerContent>
           <DrawerCloseButton />
-          <DrawerHeader borderBottomWidth="1px">Help & Documentation</DrawerHeader>
+          <DrawerHeader borderBottomWidth="1px">
+            <Heading size="md">Help & Documentation</Heading>
+          </DrawerHeader>
           <DrawerBody>
-            <Heading size="md" mb={4}>Welcome to TaskFlow</Heading>
-            <Text mb={4}>Get started with your project management journey:</Text>
-            
-            <Accordion allowMultiple defaultIndex={[0]} mb={6}>
+            <Heading size="sm" mb={4}>Getting Started</Heading>
+            <Accordion allowToggle defaultIndex={[0]}>
               <AccordionItem>
                 <h2>
                   <AccordionButton>
                     <Box flex="1" textAlign="left" fontWeight="semibold">
                       <Flex align="center">
-                        <Box as={FiBookOpen} mr={2} />
-                        Getting Started Guide
+                        <Box as={FiCheckCircle} mr={2} />
+                        Quick Start Guide
                       </Flex>
                     </Box>
                     <AccordionIcon />
@@ -219,15 +353,15 @@ export default function DashboardHeader() {
                   <List spacing={3}>
                     <ListItem>
                       <ListIcon as={FiCheckCircle} color="green.500" />
-                      Create your first board
+                      Create a new board from the dashboard
                     </ListItem>
                     <ListItem>
                       <ListIcon as={FiCheckCircle} color="green.500" />
-                      Add team members to collaborate
+                      Add columns and tasks to your board
                     </ListItem>
                     <ListItem>
                       <ListIcon as={FiCheckCircle} color="green.500" />
-                      Create cards and organize them into columns
+                      Drag and drop to organize your tasks
                     </ListItem>
                     <ListItem>
                       <ListIcon as={FiCheckCircle} color="green.500" />

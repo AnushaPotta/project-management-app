@@ -13,9 +13,11 @@ import {
   Icon,
   useColorModeValue,
   HStack,
+  Tooltip,
 } from "@chakra-ui/react";
-import { FiPlus, FiAlertCircle, FiRefreshCw } from "react-icons/fi";
+import { FiPlus, FiAlertCircle, FiRefreshCw, FiHome, FiLayout } from "react-icons/fi";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CreateBoardModal } from "@/components/board/CreateBoardModal";
 import { useQuery, useMutation } from "@apollo/client";
 import { GET_USER_BOARDS, CREATE_BOARD } from "@/graphql/board";
@@ -35,6 +37,7 @@ export default function BoardsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const toast = useToast();
+  const router = useRouter();
 
   const bgColor = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.700");
@@ -361,6 +364,26 @@ export default function BoardsPage() {
       >
         <Heading size="lg">Your Boards</Heading>
         <HStack spacing={2}>
+          <Tooltip label="Home">
+            <Button
+              leftIcon={<FiHome />}
+              size="sm"
+              variant="outline"
+              onClick={() => router.push("/")}
+            >
+              Home
+            </Button>
+          </Tooltip>
+          <Tooltip label="Dashboard">
+            <Button
+              leftIcon={<FiLayout />}
+              size="sm"
+              variant="outline"
+              onClick={() => router.push("/dashboard")}
+            >
+              Dashboard
+            </Button>
+          </Tooltip>
           <Button
             leftIcon={<FiRefreshCw />}
             size="sm"

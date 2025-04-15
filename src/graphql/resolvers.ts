@@ -351,6 +351,94 @@ export const resolvers = {
         return [];
       }
     },
+    search: async (_, { query }, { db, user }) => {
+      // Ensure user is authenticated
+      if (!user) throw new Error("You must be logged in to search");
+      
+      // Check if database connection is available
+      if (!db || !db.collection) {
+        console.error("Database connection is unavailable");
+        return [];
+      }
+      
+      console.log("Search initiated with query:", query);
+      console.log("User ID:", user.uid);
+      
+      const searchTerm = query.toLowerCase();
+      const results = [];
+      
+      try {
+        console.log("Fetching all boards from database for search");
+        const allBoards = await db.collection('boards').get();
+        console.log(`Found ${allBoards.size} total boards to search through`);
+        
+        // Since the app can display these boards in the dashboard, just search all of them
+        allBoards.forEach(doc => {
+          const board = { id: doc.id, ...doc.data() };
+          
+          // Skip boards without a title (shouldn't happen but just in case)
+          if (!board.title) {
+            console.log(`Board ${board.id} has no title, skipping`);
+            return;
+          }
+          
+          console.log(`Searching in board: ${board.id} - ${board.title}`);
+          
+          // Search in board title or description
+          if (
+            board.title.toLowerCase().includes(searchTerm) || 
+            (board.description && board.description.toLowerCase().includes(searchTerm))
+          ) {
+            console.log(`Match found in board title/description: "${board.title}"`);
+            results.push({
+              id: board.id,
+              type: 'board',
+              title: board.title,
+              description: board.description || null
+            });
+          }
+          
+          // Search in columns and cards
+          if (board.columns && Array.isArray(board.columns)) {
+            console.log(`Board ${board.id} has ${board.columns.length} columns`);
+            board.columns.forEach(column => {
+              if (column.cards && Array.isArray(column.cards)) {
+                console.log(`Column ${column.id} has ${column.cards.length} cards`);
+                column.cards.forEach(card => {
+                  if (
+                    card.title.toLowerCase().includes(searchTerm) || 
+                    (card.description && card.description.toLowerCase().includes(searchTerm))
+                  ) {
+                    console.log(`Match found in card: "${card.title}" in column "${column.title}"`);
+                    results.push({
+                      id: card.id,
+                      type: 'task',
+                      title: card.title,
+                      description: card.description || null,
+                      boardId: board.id,
+                      boardTitle: board.title,
+                      columnId: column.id,
+                      columnTitle: column.title,
+                      dueDate: card.dueDate || null
+                    });
+                  }
+                });
+              } else {
+                console.log(`Column ${column.id} has no cards or cards is not an array`);
+              }
+            });
+          } else {
+            console.log(`Board ${board.id} has no columns or columns is not an array`);
+          }
+        });
+        
+        console.log(`Returning ${results.length} search results`);
+        return results;
+      } catch (error) {
+        console.error("Search error:", error);
+        return [];
+      }
+    }
   },
 
   Mutation: {
@@ -606,8 +694,6 @@ export const resolvers = {
         return {
           id: boardId,
           ...boardData,
-          createdAt: formatTimestamp(boardData.createdAt),
-          updatedAt: formatTimestamp(boardData.updatedAt),
           columns: updatedColumns,
         };
       } catch (error) {
