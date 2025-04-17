@@ -29,6 +29,7 @@ import {
   useToast,
   IconButton,
   Tooltip,
+  Progress,
 } from "@chakra-ui/react";
 import {
   FiUser,
@@ -77,6 +78,7 @@ export default function SettingsView({ user }: SettingsViewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   // Determine which tab to show based on URL param
   const getTabIndex = () => {
@@ -159,40 +161,142 @@ export default function SettingsView({ user }: SettingsViewProps) {
     
     toast({
       title: "Image selected",
-      description: "Click Save Changes to update your profile",
+      description: "Click Upload Image to update your profile",
       status: "success",
       duration: 3000,
       isClosable: true,
     });
   };
 
-  const handleProfileSubmit = async (e: React.FormEvent) => {
+  // Cloudinary implementation with correct credentials
+  const handleImageUpdate = () => {
+    if (!selectedImage) {
+      toast({
+        title: "No image selected",
+        status: "warning",
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+    
+    // Start spinner
+    setIsUploadingImage(true);
+    
+    // IMPORTANT: Save current image preview to preserve it
+    const currentPreview = imagePreview;
+    
+    // Create form data for Cloudinary upload
+    const formData = new FormData();
+    formData.append('file', selectedImage);
+    formData.append('upload_preset', 'Poject_management'); // Your specified upload preset
+    
+    // Use your actual Cloudinary cloud name
+    const cloudName = "dc7wuxc6x";
+    
+    console.log("Uploading to Cloudinary...");
+    
+    // Upload to Cloudinary
+    fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+      method: 'POST',
+      body: formData,
+    })
+      .then(response => {
+        if (!response.ok) throw new Error('Upload failed');
+        return response.json();
+      })
+      .then(data => {
+        console.log("Cloudinary upload successful:", data);
+        
+        // Get secure URL from response
+        const imageUrl = data.secure_url;
+        
+        // Update Firebase Auth profile with Cloudinary URL
+        return updateProfile({ photoURL: imageUrl });
+      })
+      .then(() => {
+        console.log("Profile updated with new image URL");
+        
+        // Show success message
+        toast({
+          title: "Success!",
+          description: "Your profile image has been updated",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+        
+        // CRITICAL: Preserve image preview
+        if (currentPreview) {
+          setImagePreview(currentPreview);
+        }
+        
+        // Reload page after delay
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      })
+      .catch(error => {
+        console.error("Error:", error);
+        
+        toast({
+          title: "Upload Failed",
+          description: "Could not update profile image",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+        });
+        
+        // Preserve image preview on error too
+        if (currentPreview) {
+          setImagePreview(currentPreview);
+        }
+      })
+      .finally(() => {
+        // Stop spinner
+        setIsUploadingImage(false);
+      });
+    
+    // Safety timeout
+    setTimeout(() => {
+      setIsUploadingImage(false);
+      
+      // Extra safety to preserve image preview
+      if (currentPreview) {
+        setImagePreview(currentPreview);
+      }
+    }, 10000);
+  };
+
+  const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    try {
-      // Update Firebase Auth profile
-      await updateProfile({
-        displayName: profileForm.name,
-        photoURL: imagePreview || user?.photoURL,
-      });
-      
+    
+    // Update the display name only
+    updateProfile({
+      displayName: profileForm.name,
+    })
+    .then(() => {
       toast({
-        title: "Profile updated",
+        title: "Profile name updated",
         status: "success",
         duration: 3000,
         isClosable: true,
       });
-    } catch (error) {
+    })
+    .catch((error) => {
+      console.error("Error updating profile name:", error);
       toast({
-        title: "Error updating profile",
-        description: "Please try again later",
+        title: "Error updating profile name",
         status: "error",
         duration: 3000,
         isClosable: true,
       });
-    } finally {
+    })
+    .finally(() => {
+      // Always ensure the button stops spinning
       setIsSubmitting(false);
-    }
+    });
   };
 
   const handleNotificationSubmit = async (e: React.FormEvent) => {
@@ -244,77 +348,88 @@ export default function SettingsView({ user }: SettingsViewProps) {
               </CardHeader>
               <CardBody>
                 <form onSubmit={handleProfileSubmit}>
-                  <Flex 
-                    direction={{ base: "column", md: "row" }}
-                    align={{ base: "center", md: "start" }}
-                    mb={6}
-                  >
-                    <Avatar 
-                      size="xl" 
-                      name={profileForm.name} 
-                      src={imagePreview || user?.photoURL} 
-                      mb={{ base: 4, md: 0 }}
-                      mr={{ md: 6 }}
-                    />
-                    <Box textAlign={{ base: "center", md: "left" }}>
-                      <Heading size="sm" mb={2}>Profile Picture</Heading>
-                      <Text mb={3} color="gray.500">Upload a new profile picture</Text>
-                      <Button leftIcon={<FiUpload />} size="sm" onClick={handleImageSelect}>
-                        Upload Image
-                      </Button>
-                      <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        onChange={handleFileChange} 
-                        style={{ display: 'none' }} 
-                      />
-                    </Box>
-                  </Flex>
-                  
-                  <Divider mb={6} />
-                  
-                  <Stack spacing={4}>
-                    <FormControl id="name">
-                      <FormLabel>Name</FormLabel>
-                      <Input 
-                        name="name"
-                        value={profileForm.name}
-                        onChange={handleProfileChange}
-                        placeholder="Your name"
-                      />
-                    </FormControl>
-                    
-                    <FormControl id="email">
-                      <FormLabel>Email</FormLabel>
-                      <Input 
-                        name="email"
-                        value={profileForm.email}
-                        onChange={handleProfileChange}
-                        isReadOnly
-                        bg="gray.50"
-                        _dark={{ bg: "gray.700" }}
-                      />
-                    </FormControl>
-                    
-                    <FormControl id="bio">
-                      <FormLabel>Bio</FormLabel>
-                      <Input 
-                        name="bio"
-                        value={profileForm.bio}
-                        onChange={handleProfileChange}
-                        placeholder="Tell us about yourself"
-                      />
-                    </FormControl>
-                    
-                    <Button 
-                      colorScheme="blue" 
-                      type="submit"
-                      isLoading={isSubmitting}
-                      alignSelf="flex-start"
-                      mt={4}
-                    >
-                      Save Changes
-                    </Button>
+                  <Stack spacing={6}>
+                    <Flex direction={{ base: "column", md: "row" }} gap={6}>
+                      <Box flex="1">
+                        <FormControl id="name" mb={4}>
+                          <FormLabel>Name</FormLabel>
+                          <Input 
+                            name="name" 
+                            value={profileForm.name} 
+                            onChange={handleProfileChange} 
+                          />
+                        </FormControl>
+                        
+                        <FormControl id="email" mb={4}>
+                          <FormLabel>Email</FormLabel>
+                          <Input 
+                            name="email" 
+                            value={profileForm.email} 
+                            isReadOnly
+                            bg={useColorModeValue("gray.50", "gray.900")}
+                          />
+                        </FormControl>
+                        
+                        <FormControl id="bio" mb={4}>
+                          <FormLabel>Bio</FormLabel>
+                          <Input 
+                            name="bio" 
+                            value={profileForm.bio} 
+                            onChange={handleProfileChange} 
+                          />
+                        </FormControl>
+                        
+                        <Button 
+                          colorScheme="blue" 
+                          type="submit"
+                          isLoading={isSubmitting}
+                          alignSelf="flex-start"
+                        >
+                          Update Profile
+                        </Button>
+                      </Box>
+                      
+                      <Box textAlign={{ base: "center", md: "left" }}>
+                        <Heading size="sm" mb={2}>Profile Picture</Heading>
+                        <Text mb={3} color="gray.500">Upload a new profile picture</Text>
+                        
+                        <Avatar 
+                          size="xl" 
+                          mb={4}
+                          src={imagePreview || user?.photoURL || undefined}
+                          name={user?.displayName || ""}
+                        />
+                        
+                        <VStack spacing={2} align="stretch">
+                          <Button 
+                            leftIcon={<FiUpload />} 
+                            onClick={handleImageSelect}
+                            size="sm"
+                          >
+                            Select Image
+                          </Button>
+                          
+                          {selectedImage && (
+                            <Button 
+                              colorScheme="blue" 
+                              onClick={handleImageUpdate}
+                              isLoading={isUploadingImage}
+                              size="sm"
+                            >
+                              Upload Image
+                            </Button>
+                          )}
+                        </VStack>
+                        
+                        <input 
+                          type="file" 
+                          ref={fileInputRef} 
+                          accept="image/*" 
+                          onChange={handleFileChange} 
+                          style={{ display: 'none' }} 
+                        />
+                      </Box>
+                    </Flex>
                   </Stack>
                 </form>
               </CardBody>

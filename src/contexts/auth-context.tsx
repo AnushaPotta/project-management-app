@@ -244,8 +244,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) throw new Error("No user logged in");
     try {
       await firebaseUpdateProfile(user, data);
-      // Create a new user object with updated properties to trigger re-render
-      setUser({ ...user, ...data });
+      
+      // Instead of creating a new user object with spread operator (which loses methods),
+      // use the current user from auth which preserves all methods
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        setUser(currentUser);
+      }
     } catch (error: unknown) {
       if (error instanceof FirebaseError) {
         throw new Error(`Profile update failed: ${error.message}`);
