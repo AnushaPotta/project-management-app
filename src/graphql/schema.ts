@@ -20,7 +20,18 @@ export const typeDefs = `#graphql
     dueDate: String
     labels: [String]
     status: String
-  updatedAt: String
+    updatedAt: String
+    createdAt: String
+  }
+
+  type Invitation {
+    id: ID!
+    email: String!
+    boardId: ID!
+    status: String!
+    role: String!
+    createdAt: String!
+    expiresAt: String!
   }
 
   type Column {
@@ -28,6 +39,8 @@ export const typeDefs = `#graphql
     title: String!
     order: Int!
     cards: [Card]
+    createdAt: String
+    updatedAt: String
   }
 
   type Board {
@@ -83,8 +96,8 @@ export const typeDefs = `#graphql
   type Query {
     boards: [Board]
     board(id: ID!): Board
-        upcomingDeadlines(days: Int): [DeadlineCard!]!
-
+    getBoardMembers(boardId: ID!): [User]
+    upcomingDeadlines(days: Int): [DeadlineCard!]!
   }
 
 type TaskStats {
@@ -143,6 +156,9 @@ extend type Query {
 
     inviteMember(boardId: ID!, email: String!): Board
     removeMember(boardId: ID!, memberId: ID!): Board
+    inviteMemberByEmail(boardId: ID!, email: String!, role: String): Invitation
+    acceptInvitation(token: String!): Board
+    declineInvitation(token: String!): Boolean
 
     addColumn(boardId: ID!, title: String!): Board
     updateColumn(columnId: ID!, input: ColumnUpdateInput!): Column
@@ -157,7 +173,6 @@ extend type Query {
       source: DragItemInput!
       destination: DragItemInput!
     ): Board
-      markTaskComplete(id: ID!): Card
-
+    markTaskComplete(id: ID!): Card
   }
 `;

@@ -90,15 +90,19 @@ export default function UpcomingDeadlines() {
   }
 
   // Choose color based on deadline proximity
-  const getDeadlineColor = (dueDate) => {
-    const date = new Date(dueDate);
-    if (isPast(date)) return "red";
+  const getDeadlineColor = (dueDate: Date) => {
+    try {
+      if (isPast(dueDate)) return "red";
 
-    const daysLeft = differenceInDays(date, new Date());
-    if (daysLeft <= 1) return "red";
-    if (daysLeft <= 3) return "orange";
-    if (daysLeft <= 7) return "yellow";
-    return "green";
+      const daysLeft = differenceInDays(dueDate, new Date());
+      if (daysLeft <= 1) return "red";
+      if (daysLeft <= 3) return "orange";
+      if (daysLeft <= 7) return "yellow";
+      return "green";
+    } catch (e) {
+      console.error('Error determining deadline color:', e);
+      return "gray"; // Neutral fallback color
+    }
   };
 
   console.log("UpcomingDeadlines render:", { loading, error, data });
@@ -110,9 +114,55 @@ export default function UpcomingDeadlines() {
       </Heading>
       <VStack spacing={4} align="stretch" maxH="400px" overflowY="auto">
         {data.upcomingDeadlines.map((task) => {
-          const deadlineColor = getDeadlineColor(task.dueDate);
-          const daysLeft = differenceInDays(new Date(task.dueDate), new Date());
-          const isPastDue = isPast(new Date(task.dueDate));
+          // Safely parse the due date with a cleaner implementation
+          let dueDate;
+          try {
+            const timestamp = task.dueDate;
+
+            // 🛑 Early return if timestamp is missing or empty
+            if (
+              !timestamp || 
+              (typeof timestamp === 'object' && Object.keys(timestamp).length === 0)
+            ) {
+              console.warn('Empty or missing due date:', timestamp);
+              dueDate = new Date(); // Default to current date
+            }
+            else if (typeof timestamp === 'object' && timestamp._seconds) {
+              dueDate = new Date(timestamp._seconds * 1000);
+            } 
+            else if (typeof timestamp === 'object' && timestamp.seconds) {
+              dueDate = new Date(timestamp.seconds * 1000);
+            } 
+            else if (typeof timestamp === 'object' && typeof timestamp.toDate === 'function') {
+              dueDate = timestamp.toDate();
+            } 
+            else if (typeof timestamp === 'number') {
+              dueDate = new Date(timestamp > 10000000000 ? timestamp : timestamp * 1000);
+            } 
+            else if (typeof timestamp === 'string') {
+              dueDate = new Date(timestamp);
+            } 
+            else if (timestamp instanceof Date) {
+              dueDate = timestamp;
+            } 
+            else {
+              console.warn('Unexpected due date format:', timestamp);
+              dueDate = new Date(); // Default to current date if format is unknown
+            }
+
+            // 🛡️ Validate the created date
+            if (isNaN(dueDate.getTime())) {
+              console.error('Invalid date after parsing:', dueDate);
+              dueDate = new Date(); // Fall back to current date
+            }
+          } catch (e) {
+            console.error('Error parsing due date:', e);
+            dueDate = new Date(); // Fallback to current date if parsing fails
+          }
+          
+          const deadlineColor = getDeadlineColor(dueDate);
+          const daysLeft = differenceInDays(dueDate, new Date());
+          const isPastDue = isPast(dueDate);
 
           return (
             // Add onClick handler to make the card clickable
@@ -128,7 +178,14 @@ export default function UpcomingDeadlines() {
               <Flex justify="space-between" align="center">
                 <Text fontWeight="medium">{task.title}</Text>
                 <Badge colorScheme={deadlineColor}>
-                  {format(new Date(task.dueDate), "MMM dd, yyyy")}
+                  {(() => {
+                    try {
+                      return format(dueDate, "MMM dd, yyyy");
+                    } catch (e) {
+                      console.error('Error formatting date for badge:', e);
+                      return 'Date unknown';
+                    }
+                  })()}
                 </Badge>
               </Flex>
 

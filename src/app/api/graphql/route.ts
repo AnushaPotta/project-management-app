@@ -1,38 +1,57 @@
-// src/app/api/graphql/route.ts
 import { ApolloServer } from "@apollo/server";
 import { startServerAndCreateNextHandler } from "@as-integrations/next";
 import { typeDefs } from "@/graphql/schema";
 import { resolvers } from "@/graphql/resolvers";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { NextRequest } from "next/server";
+import { getAuth } from 'firebase-admin/auth';
+import { db } from '@/lib/firebase';
+import { NextRequest } from 'next/server';
 
+// Create Apollo Server instance
 const server = new ApolloServer({
   typeDefs,
   resolvers,
 });
 
+// Create the API route handler with context
 const handler = startServerAndCreateNextHandler(server, {
   context: async (req: NextRequest) => {
-    let user = null;
-
-    // Correctly access headers with Next.js App Router
-    const authHeader = req.headers.get("authorization");
-
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      const token = authHeader.slice(7); // Remove "Bearer " prefix
-
-      try {
-        user = await adminAuth.verifyIdToken(token);
-      } catch (error) {
-        console.error("Error verifying auth token:", error);
+    try {
+      // Get the authorization header
+      const authHeader = req.headers.get('authorization') || '';
+      
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        // No token provided
+        return { user: null };
       }
+      
+      // Extract the token
+      const token = authHeader.split('Bearer ')[1];
+      
+      if (!token) {
+        return { user: null };
+      }
+      
+      try {
+        // Verify the Firebase token
+        const decodedToken = await getAuth().verifyIdToken(token);
+        
+        // Get the user from Firebase
+        const userRecord = await getAuth().getUser(decodedToken.uid);
+        
+        // Return the user in the context
+        return {
+          user: userRecord,
+          db
+        };
+      } catch (error) {
+        console.error('Error verifying token:', error);
+        return { user: null };
+      }
+    } catch (error) {
+      console.error('Error in GraphQL context:', error);
+      return { user: null };
     }
-
-    return { 
-      user,
-      db: adminDb // Pass Firestore database to context with the name 'db'
-    };
-  },
+  }
 });
 
 export { handler as GET, handler as POST };

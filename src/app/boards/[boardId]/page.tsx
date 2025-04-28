@@ -12,6 +12,7 @@ import {
   IconButton,
   Button,
   useColorModeValue,
+  useDisclosure,
 } from "@chakra-ui/react";
 import { FiPlus, FiStar, FiSettings } from "react-icons/fi";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
@@ -22,10 +23,14 @@ import {
   ADD_COLUMN,
   MOVE_CARD,
   MOVE_COLUMN,
+  INVITE_MEMBER,
+  REMOVE_MEMBER,
 } from "@/graphql/board";
 import { Board } from "@/types/board";
 import Column from "@/components/board/Column";
 import AddColumnModal from "@/components/board/AddColumnModal";
+import { BoardHeader } from "@/components/board/BoardHeader";
+import { BoardMembers } from "@/components/board/BoardMembers";
 
 export default function BoardPage() {
   const { boardId } = useParams();
@@ -56,6 +61,15 @@ export default function BoardPage() {
   const [addColumnMutation] = useMutation(ADD_COLUMN);
   const [moveCardMutation] = useMutation(MOVE_CARD);
   const [moveColumnMutation] = useMutation(MOVE_COLUMN);
+  const [inviteMemberMutation] = useMutation(INVITE_MEMBER);
+  const [removeMemberMutation] = useMutation(REMOVE_MEMBER);
+
+  // Modal for members management
+  const { 
+    isOpen: isMembersModalOpen, 
+    onOpen: openMembersModal, 
+    onClose: closeMembersModal 
+  } = useDisclosure();
 
   // Set board from query data
   useEffect(() => {
@@ -323,6 +337,75 @@ export default function BoardPage() {
     }
   };
 
+  // Handle inviting a member by email
+  const handleInviteMember = async (email: string) => {
+    try {
+      console.log(`Attempting to invite ${email} to board ${board?.id}`);
+      
+      const { data } = await inviteMemberMutation({
+        variables: {
+          boardId: board?.id,
+          email,
+        },
+      });
+      
+      console.log("Invitation response:", data);
+      
+      if (data?.inviteMember) {
+        // Update the board state with the new member
+        setBoard({
+          ...board!,
+          members: data.inviteMember.members,
+        });
+        
+        toast({
+          title: "Member invited",
+          description: `Invitation sent to ${email}`,
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+        
+        return true;
+      } else {
+        throw new Error("Invitation failed, no data returned");
+      }
+    } catch (error) {
+      console.error("Error inviting member:", error);
+      handleError(error, toast);
+      throw error; // Re-throw to allow the component to handle it
+    }
+  };
+  
+  // Handle removing a member from the board
+  const handleRemoveMember = async (memberId: string) => {
+    try {
+      const { data } = await removeMemberMutation({
+        variables: {
+          boardId: board?.id,
+          memberId,
+        },
+      });
+      
+      if (data?.removeMember) {
+        // Update the board state with the member removed
+        setBoard({
+          ...board!,
+          members: data.removeMember.members,
+        });
+        
+        toast({
+          title: "Member removed",
+          status: "info",
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      handleError(error, toast);
+    }
+  };
+
   // Add debug info to see if query is loading or if there's an error
   console.log("Is loading:", isLoading);
   console.log("Query error:", queryError);
@@ -359,33 +442,36 @@ export default function BoardPage() {
   return (
     <Box height="100vh" bg={bgColor} display="flex" flexDirection="column">
       {/* Board Header */}
-      <Flex
-        py={3}
-        px={6}
-        bg={headerBg}
-        borderBottomWidth="1px"
-        align="center"
-        justify="space-between"
-      >
-        <Flex align="center">
-          <Heading size="lg" mr={3}>
-            {board.title}
-          </Heading>
-          <IconButton
-            aria-label={board.isStarred ? "Unstar board" : "Star board"}
-            icon={<FiStar fill={board.isStarred ? "currentColor" : "none"} />}
-            variant="ghost"
-            colorScheme={board.isStarred ? "yellow" : "gray"}
-            onClick={toggleBoardStar}
-          />
-        </Flex>
-        <IconButton
-          aria-label="Board settings"
-          icon={<FiSettings />}
-          variant="ghost"
-          onClick={() => router.push(`/settings?tab=workspace`)}
-        />
-      </Flex>
+      <BoardHeader 
+        title={board.title}
+        members={board.members?.length || 0}
+        isStarred={board.isStarred}
+        onTitleChange={(newTitle) => {
+          updateBoardMutation({
+            variables: {
+              id: board.id,
+              input: { title: newTitle },
+            },
+          }).then((result) => {
+            if (result.data?.updateBoard) {
+              setBoard({
+                ...board,
+                title: newTitle,
+              });
+            }
+          }).catch((error) => handleError(error, toast));
+        }}
+        onToggleStar={toggleBoardStar}
+        onInviteMember={openMembersModal}
+      />
+      
+      <BoardMembers
+        members={board.members || []}
+        onInviteMember={handleInviteMember}
+        onRemoveMember={handleRemoveMember}
+        isOpen={isMembersModalOpen}
+        onClose={closeMembersModal}
+      />
 
       {/* Board Content */}
       <Box

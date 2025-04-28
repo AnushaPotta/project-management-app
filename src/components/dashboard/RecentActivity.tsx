@@ -99,9 +99,46 @@ export default function RecentActivity() {
                 <Text fontWeight="medium">{activity.userName}</Text>
               </Flex>
               <Text fontSize="sm" color="gray.500">
-                {formatDistanceToNow(new Date(activity.timestamp), {
-                  addSuffix: true,
-                })}
+                {(() => {
+                  try {
+                    const timestamp = activity.timestamp;
+
+                    // Early return if timestamp is missing or empty
+                    if (
+                      !timestamp || 
+                      (typeof timestamp === 'object' && Object.keys(timestamp).length === 0)
+                    ) {
+                      return 'recently';
+                    }
+
+                    let date: Date;
+
+                    if (typeof timestamp === 'object' && timestamp._seconds) {
+                      date = new Date(timestamp._seconds * 1000);
+                    } else if (typeof timestamp === 'object' && timestamp.seconds) {
+                      date = new Date(timestamp.seconds * 1000);
+                    } else if (typeof timestamp === 'object' && typeof timestamp.toDate === 'function') {
+                      date = timestamp.toDate();
+                    } else if (typeof timestamp === 'number') {
+                      date = new Date(timestamp > 10000000000 ? timestamp : timestamp * 1000);
+                    } else if (typeof timestamp === 'string') {
+                      date = new Date(timestamp);
+                    } else if (timestamp instanceof Date) {
+                      date = timestamp;
+                    } else {
+                      return 'recently';
+                    }
+
+                    // Validate the created date
+                    if (isNaN(date.getTime())) {
+                      return 'recently';
+                    }
+
+                    return formatDistanceToNow(date, { addSuffix: true });
+                  } catch (err) {
+                    return 'recently';
+                  }
+                })()}
               </Text>
             </Flex>
             <Text mt={1}>{activity.description}</Text>

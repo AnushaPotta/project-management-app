@@ -65,7 +65,6 @@ export default function SettingsView({ user }: SettingsViewProps) {
   const [profileForm, setProfileForm] = useState({
     name: user?.displayName || user?.name || "",
     email: user?.email || "",
-    bio: "",
   });
   const [notificationSettings, setNotificationSettings] = useState({
     emailNotifications: true,
@@ -272,22 +271,23 @@ export default function SettingsView({ user }: SettingsViewProps) {
     e.preventDefault();
     setIsSubmitting(true);
     
-    // Update the display name only
+    // Update the display name in Firebase Auth
     updateProfile({
       displayName: profileForm.name,
     })
     .then(() => {
       toast({
-        title: "Profile name updated",
+        title: "Profile updated",
+        description: "Your profile has been successfully updated",
         status: "success",
         duration: 3000,
         isClosable: true,
       });
     })
     .catch((error) => {
-      console.error("Error updating profile name:", error);
+      console.error("Error updating profile:", error);
       toast({
-        title: "Error updating profile name",
+        title: "Error updating profile",
         status: "error",
         duration: 3000,
         isClosable: true,
@@ -367,15 +367,6 @@ export default function SettingsView({ user }: SettingsViewProps) {
                             value={profileForm.email} 
                             isReadOnly
                             bg={useColorModeValue("gray.50", "gray.900")}
-                          />
-                        </FormControl>
-                        
-                        <FormControl id="bio" mb={4}>
-                          <FormLabel>Bio</FormLabel>
-                          <Input 
-                            name="bio" 
-                            value={profileForm.bio} 
-                            onChange={handleProfileChange} 
                           />
                         </FormControl>
                         
