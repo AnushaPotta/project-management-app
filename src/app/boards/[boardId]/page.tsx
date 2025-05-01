@@ -393,10 +393,20 @@ export default function BoardPage() {
       console.log("Invitation response:", data);
       
       if (data?.inviteMember) {
-        // Update the board state with the new member
+        // Check if the current admin user is still in the returned members list
+        const adminMember = board!.members.find(m => m.role === 'ADMIN' && m.id === currentUser?.uid);
+        const newMembersList = data.inviteMember.members;
+        
+        // If admin isn't in the returned list but was in our local state, keep them
+        if (adminMember && !newMembersList.some(m => m.id === adminMember.id)) {
+          console.log("Preserving admin in members list", adminMember);
+          newMembersList.push(adminMember);
+        }
+        
+        // Update the board state with the combined member list
         setBoard({
           ...board!,
-          members: data.inviteMember.members,
+          members: newMembersList,
         });
         
         toast({

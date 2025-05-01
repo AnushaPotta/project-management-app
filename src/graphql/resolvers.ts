@@ -1018,12 +1018,27 @@ export const resolvers = {
         
         const board = { id: boardDoc.id, ...boardDoc.data() };
         
-        if (board.userId !== user.uid) {
-          throw new GraphQLError('Not authorized to invite members to this board', {
-            extensions: {
-              code: 'UNAUTHORIZED',
-            },
-          });
+        // Check if user is either the board creator or an admin member
+        const isCreator = board.userId === user.uid;
+        
+        if (!isCreator) {
+          // Check if the user is an admin member
+          const membersRef = adminDb.collection('boards').doc(boardId).collection('members');
+          const adminMemberQuery = await membersRef
+            .where('id', '==', user.uid)
+            .where('role', '==', 'ADMIN')
+            .get();
+            
+          const isAdmin = !adminMemberQuery.empty;
+          
+          // If neither creator nor admin, unauthorized
+          if (!isAdmin) {
+            throw new GraphQLError('Not authorized to invite members to this board', {
+              extensions: {
+                code: 'UNAUTHORIZED',
+              },
+            });
+          }
         }
 
         // Check if the user already exists - Use Admin SDK
@@ -1065,13 +1080,24 @@ export const resolvers = {
         // Generate invitation link with the member ID
         const invitationLink = `${process.env.NEXT_PUBLIC_APP_URL}/api/invitations/accept?id=${memberRef.id}`;
 
-        // Send invitation email using your existing sendBoardInvitation function
-        await sendBoardInvitation({
-          email,
-          inviterName: user.displayName || user.email || 'A user',
-          boardName: board.title,
-          invitationLink,
-        });
+        // Try to send invitation email, but continue even if it fails
+        try {
+          // First check if the function exists
+          if (typeof sendBoardInvitation === 'function') {
+            await sendBoardInvitation({
+              email,
+              inviterName: user.displayName || user.email || 'A user',
+              boardName: board.title,
+              invitationLink,
+            });
+          } else {
+            console.log('Email invitation not sent: sendBoardInvitation function not found');
+            // Continue without sending email - the member record is already created
+          }
+        } catch (emailError) {
+          console.log('Failed to send invitation email, but continuing with member addition:', emailError);
+          // Continue without throwing - we'll still add the member to the board
+        }
 
         return {
           id: boardId,
