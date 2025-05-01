@@ -17,6 +17,7 @@ import {
 import { FiPlus, FiStar, FiSettings } from "react-icons/fi";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useQuery, useMutation } from "@apollo/client";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
   GET_BOARD,
   UPDATE_BOARD,
@@ -25,6 +26,7 @@ import {
   MOVE_COLUMN,
   INVITE_MEMBER,
   REMOVE_MEMBER,
+  DELETE_BOARD,
 } from "@/graphql/board";
 import { Board } from "@/types/board";
 import Column from "@/components/board/Column";
@@ -39,8 +41,20 @@ export default function BoardPage() {
   const [isAddColumnModalOpen, setIsAddColumnModalOpen] = useState(false);
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const toast = useToast();
+  
+  // Get current user
+  useEffect(() => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setCurrentUser(user);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const bgColor = useColorModeValue("gray.50", "gray.900");
   const headerBg = useColorModeValue("white", "gray.800");
@@ -63,6 +77,7 @@ export default function BoardPage() {
   const [moveColumnMutation] = useMutation(MOVE_COLUMN);
   const [inviteMemberMutation] = useMutation(INVITE_MEMBER);
   const [removeMemberMutation] = useMutation(REMOVE_MEMBER);
+  const [deleteBoardMutation] = useMutation(DELETE_BOARD);
 
   // Modal for members management
   const { 
@@ -74,11 +89,37 @@ export default function BoardPage() {
   // Set board from query data
   useEffect(() => {
     console.log("Query data received:", data);
-    if (data?.board) {
+    if (data?.board && currentUser) {
       console.log("Setting board from query data:", data.board);
+      // Log members specifically to debug
+      console.log("Board members from server:", data.board.members);
+      
+      // If no members, add the current user as an admin member
+      if (!data.board.members || data.board.members.length === 0) {
+        console.log("No members found in data, adding current user as admin");
+        
+        // Create board with the current user as admin
+        const boardWithAdmin = {
+          ...data.board,
+          members: [
+            {
+              id: currentUser.uid,
+              name: currentUser.displayName || currentUser.email || 'Admin',
+              email: currentUser.email || '',
+              role: 'ADMIN',
+              status: 'ACCEPTED'
+            }
+          ]
+        };
+        setBoard(boardWithAdmin);
+      } else {
+        setBoard(data.board);
+      }
+    } else if (data?.board) {
+      // If we don't have the current user yet, just set the board as is
       setBoard(data.board);
     }
-  }, [data]);
+  }, [data, currentUser]);
 
   useEffect(() => {
     if (board?.columns && board.columns.length > 0) {
@@ -377,6 +418,34 @@ export default function BoardPage() {
     }
   };
   
+  // Handle board deletion and redirect to boards page
+  const handleDeleteBoard = async () => {
+    try {
+      if (!board) return;
+      
+      const confirmed = window.confirm(`Are you sure you want to delete the board "${board.title}"? This action cannot be undone.`);
+      
+      if (!confirmed) return;
+      
+      await deleteBoardMutation({
+        variables: { id: board.id },
+      });
+      
+      toast({
+        title: "Board deleted",
+        description: "The board has been permanently deleted",
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
+      
+      // Redirect to boards page
+      router.push("/boards");
+    } catch (error) {
+      handleError(error, toast);
+    }
+  };
+
   // Handle removing a member from the board
   const handleRemoveMember = async (memberId: string) => {
     try {
@@ -463,6 +532,7 @@ export default function BoardPage() {
         }}
         onToggleStar={toggleBoardStar}
         onInviteMember={openMembersModal}
+        onDelete={handleDeleteBoard}
       />
       
       <BoardMembers

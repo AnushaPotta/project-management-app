@@ -10,6 +10,9 @@ interface BoardHeaderProps {
   onTitleChange: (newTitle: string) => void;
   onToggleStar: () => void;
   onInviteMember: () => void;
+  onDelete?: () => void;
+  onArchive?: () => void;
+  onEdit?: () => void;
 }
 
 export function BoardHeader({
@@ -19,6 +22,9 @@ export function BoardHeader({
   onTitleChange,
   onToggleStar,
   onInviteMember,
+  onDelete,
+  onArchive,
+  onEdit,
 }: BoardHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [newTitle, setNewTitle] = useState(title);
@@ -77,7 +83,11 @@ export function BoardHeader({
         </ButtonGroup>
       </Flex>
 
-      <BoardMenu />
+      <BoardMenu 
+        onDelete={onDelete}
+        onArchive={onArchive}
+        onEdit={onEdit}
+      />
     </Flex>
   );
 }

@@ -113,9 +113,9 @@ type ActivityItem {
   boardId: String!
   boardTitle: String!
   userId: String!
-  userName: String!
+  userName: String
   timestamp: String!
-  description: String!
+  description: String
 }
 
 type DeadlineCard {
@@ -142,7 +142,7 @@ type SearchResult {
 
 extend type Query {
   taskStats: TaskStats!
-  recentActivity(limit: Int, cursor: String): [ActivityItem!]!
+  recentActivity(limit: Int, offset: Int): [ActivityItem!]!
   upcomingDeadlines(days: Int): [DeadlineCard!]!
   search(query: String!): [SearchResult!]!
 }
@@ -150,7 +150,7 @@ extend type Query {
 
 
   type Mutation {
-    createBoard(input: CreateBoardInput!): Board
+    createBoard(title: String!, description: String): Board
     updateBoard(id: ID!, input: BoardUpdateInput!): Board
     deleteBoard(id: ID!): Boolean
 

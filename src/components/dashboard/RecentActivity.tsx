@@ -101,39 +101,25 @@ export default function RecentActivity() {
               <Text fontSize="sm" color="gray.500">
                 {(() => {
                   try {
-                    const timestamp = activity.timestamp;
-
-                    // Early return if timestamp is missing or empty
-                    if (
-                      !timestamp || 
-                      (typeof timestamp === 'object' && Object.keys(timestamp).length === 0)
-                    ) {
-                      return 'recently';
-                    }
-
-                    let date: Date;
-
-                    if (typeof timestamp === 'object' && timestamp._seconds) {
-                      date = new Date(timestamp._seconds * 1000);
-                    } else if (typeof timestamp === 'object' && timestamp.seconds) {
-                      date = new Date(timestamp.seconds * 1000);
-                    } else if (typeof timestamp === 'object' && typeof timestamp.toDate === 'function') {
-                      date = timestamp.toDate();
-                    } else if (typeof timestamp === 'number') {
-                      date = new Date(timestamp > 10000000000 ? timestamp : timestamp * 1000);
-                    } else if (typeof timestamp === 'string') {
-                      date = new Date(timestamp);
-                    } else if (timestamp instanceof Date) {
-                      date = timestamp;
+                    // Handle different timestamp formats
+                    if (!activity.timestamp) return 'recently';
+                    
+                    let date;
+                    if (typeof activity.timestamp === 'object' && activity.timestamp._seconds) {
+                      // Firestore timestamp object
+                      date = new Date(activity.timestamp._seconds * 1000);
+                    } else if (typeof activity.timestamp === 'string') {
+                      // ISO string
+                      date = new Date(activity.timestamp);
                     } else {
                       return 'recently';
                     }
-
-                    // Validate the created date
+                    
+                    // Verify it's a valid date
                     if (isNaN(date.getTime())) {
                       return 'recently';
                     }
-
+                    
                     return formatDistanceToNow(date, { addSuffix: true });
                   } catch (err) {
                     return 'recently';

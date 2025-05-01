@@ -24,21 +24,34 @@ interface Member {
   name: string;
   email: string;
   avatar?: string;
+  role?: string; // Add role field for admin status
 }
 
 interface BoardMembersProps {
   members: Member[];
   onInviteMember: (email: string) => void;
   onRemoveMember: (memberId: string) => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 export function BoardMembers({
   members,
   onInviteMember,
   onRemoveMember,
+  isOpen: isOpenProp,
+  onClose: onCloseProp,
 }: BoardMembersProps) {
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  // Use the provided isOpen and onClose props if available, otherwise use internal state
+  const disclosure = useDisclosure();
+  const isOpen = isOpenProp !== undefined ? isOpenProp : disclosure.isOpen;
+  const onOpen = disclosure.onOpen;
+  const onClose = onCloseProp || disclosure.onClose;
+  
   const [email, setEmail] = useState("");
+  
+  // Debug members array
+  console.log("Members in BoardMembers component:", members);
 
   const handleInvite = () => {
     if (email) {
@@ -86,7 +99,14 @@ export function BoardMembers({
                         src={member.avatar}
                       />
                       <Box>
-                        <Text fontWeight="bold">{member.name}</Text>
+                        <HStack>
+                          <Text fontWeight="bold">{member.name}</Text>
+                          {member.role === 'ADMIN' && (
+                            <Text fontSize="xs" color="purple.500" fontWeight="bold">
+                              ADMIN
+                            </Text>
+                          )}
+                        </HStack>
                         <Text fontSize="sm" color="gray.500">
                           {member.email}
                         </Text>

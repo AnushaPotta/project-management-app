@@ -109,7 +109,7 @@ export default function BoardsPage() {
   // GraphQL mutation to create a board with improved cache handling
   const [createBoardMutation, { loading: isCreating }] = useMutation<
     CreateBoardResult,
-    { input: CreateBoardInput }
+    { title: string, description?: string }
   >(CREATE_BOARD, {
     update(cache, { data }) {
       if (!data) return;
@@ -125,13 +125,19 @@ export default function BoardsPage() {
           existingData?.boards?.length || 0
         );
 
+        // Add isStarred field with default value if it's missing
+        const newBoard = {
+          ...data.createBoard,
+          isStarred: data.createBoard.isStarred ?? false // Default to false if not present
+        };
+
         // Write back to the cache with the new board included
         cache.writeQuery({
           query: GET_USER_BOARDS,
           data: {
             boards: existingData?.boards
-              ? [...existingData.boards, data.createBoard]
-              : [data.createBoard],
+              ? [...existingData.boards, newBoard]
+              : [newBoard],
           },
         });
 
@@ -171,7 +177,8 @@ export default function BoardsPage() {
     try {
       await createBoardMutation({
         variables: {
-          input: boardData,
+          title: boardData.title,
+          description: boardData.description,
         },
       });
       // The onCompleted and onError callbacks will handle the rest

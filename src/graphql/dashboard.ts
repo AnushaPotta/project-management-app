@@ -12,8 +12,8 @@ export const GET_TASK_STATS = gql`
 `;
 
 export const GET_RECENT_ACTIVITY = gql`
-  query GetRecentActivity($limit: Int, $cursor: String) {
-    recentActivity(limit: $limit, cursor: $cursor) {
+  query GetRecentActivity($limit: Int, $offset: Int) {
+    recentActivity(limit: $limit, offset: $offset) {
       id
       type
       boardId

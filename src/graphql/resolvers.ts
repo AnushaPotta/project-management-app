@@ -144,6 +144,48 @@ export const resolvers = {
           throw new Error("Not authorized to view this board");
         }
 
+        // Get members
+        const membersRef = boardRef.collection("members");
+        const membersSnapshot = await membersRef.get();
+        let members = membersSnapshot.docs.map(memberDoc => ({
+          id: memberDoc.id,
+          ...memberDoc.data(),
+        }));
+        
+        // If no members found, add the current user as an admin
+        if (members.length === 0) {
+          console.log("No members found for board, adding current user as admin");
+          
+          // Get user data
+          const userDoc = await adminDb.collection('users').doc(user.uid).get();
+          let userName = 'Admin';
+          let userEmail = '';
+          
+          if (userDoc.exists) {
+            const userData = userDoc.data();
+            if (userData) {
+              userName = userData.name || userData.displayName || userData.email || 'Admin';
+              userEmail = userData.email || '';
+            }
+          }
+          
+          // Add the user to members collection
+          const memberData = {
+            id: user.uid,
+            name: userName,
+            email: userEmail,
+            role: 'ADMIN',
+            status: 'ACCEPTED',
+            joinedAt: firestore.FieldValue.serverTimestamp()
+          };
+          
+          // Add to Firestore for future queries
+          await membersRef.doc(user.uid).set(memberData);
+          
+          // Add to the current response
+          members = [memberData];
+        }
+
         // Get columns
         const columnsRef = boardRef.collection("columns");
         const columnsSnapshot = await columnsRef.orderBy("order").get();
@@ -171,6 +213,7 @@ export const resolvers = {
         return {
           id: boardDoc.id,
           columns,
+          members,
           ...boardData,
         };
       } catch (error) {
@@ -661,6 +704,20 @@ export const resolvers = {
 
       try {
         const boardRef = adminDb.collection("boards").doc();
+        
+        // Get user data for activity and member info
+        const userDoc = await adminDb.collection('users').doc(user.uid).get();
+        let userName = 'Admin';
+        let userEmail = '';
+        
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          if (userData) {
+            userName = userData.name || userData.displayName || userData.email || 'Admin';
+            userEmail = userData.email || '';
+          }
+        }
+        
         const newBoard = {
           title,
           description: description || "",
@@ -671,19 +728,41 @@ export const resolvers = {
         };
 
         await boardRef.set(newBoard);
+        
+        // Create members subcollection with admin role for creator
+        const membersRef = boardRef.collection('members');
+        await membersRef.doc(user.uid).set({
+          id: user.uid,
+          name: userName,
+          email: userEmail,
+          role: 'ADMIN', // Set the creator as an admin
+          status: 'ACCEPTED',
+          joinedAt: firestore.FieldValue.serverTimestamp()
+        });
 
         // Log activity
         await logActivity({
           type: "BOARD_CREATED",
           userId: user.uid,
+          userName, // Explicitly pass the user's name
           boardId: boardRef.id,
           data: { title },
         });
+
+        // Create a member object for the response
+        const memberData = {
+          id: user.uid,
+          name: userName,
+          email: userEmail,
+          role: 'ADMIN',
+          status: 'ACCEPTED'
+        };
 
         return {
           id: boardRef.id,
           ...newBoard,
           columns: [],
+          members: [memberData], // Include the member in the response
         };
       } catch (error) {
         console.error("Error creating board:", error);
@@ -773,13 +852,12 @@ export const resolvers = {
         await logActivity({
           type: "BOARD_DELETED",
           userId: user.uid,
-          data: { boardId: id, title: boardData.title },
+          boardId: id,
+          data: { title: boardData.title },
         });
 
-        return {
-          id,
-          ...boardData,
-        };
+        // Return true to indicate successful deletion
+        return true;
       } catch (error) {
         console.error("Error deleting board:", error);
         throw error;
@@ -845,19 +923,32 @@ export const resolvers = {
       }
 
       try {
-        // Find the column and its parent board
-        const columnsRef = adminDb.collectionGroup("columns");
-        const columnQuery = await columnsRef.where(firestore.FieldPath.documentId(), "==", columnId).get();
-
-        if (columnQuery.empty) {
-          throw new Error("Column not found");
+        // Query all boards to find which one contains our column
+        const boardsRef = adminDb.collection("boards");
+        const boardsSnapshot = await boardsRef.where("memberIds", "array-contains", user.uid).get();
+        
+        if (boardsSnapshot.empty) {
+          throw new Error("No boards found for current user");
         }
-
-        const columnDoc = columnQuery.docs[0];
-        const boardRef = columnDoc.ref.parent.parent;
-
-        if (!boardRef) {
-          throw new Error("Board reference not found");
+        
+        // Search through each board's columns for the target column
+        let columnDoc = null;
+        let boardRef = null;
+        
+        // Check each board
+        for (const boardDoc of boardsSnapshot.docs) {
+          const columnsRef = boardDoc.ref.collection("columns");
+          const columnSnapshot = await columnsRef.doc(columnId).get();
+          
+          if (columnSnapshot.exists) {
+            columnDoc = columnSnapshot;
+            boardRef = boardDoc.ref;
+            break;
+          }
+        }
+        
+        if (!columnDoc || !boardRef) {
+          throw new Error("Column not found or you don't have access to this column");
         }
 
         const boardDoc = await boardRef.get();

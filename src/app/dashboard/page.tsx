@@ -51,7 +51,8 @@ function DashboardContent() {
     try {
       const { data: createData } = await createBoard({
         variables: {
-          input: boardData,
+          title: boardData.title,
+          description: boardData.description,
         },
         refetchQueries: [{ query: GET_USER_BOARDS }],
       });

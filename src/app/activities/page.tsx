@@ -32,7 +32,7 @@ export default function ActivitiesPage() {
   const PAGE_SIZE = 10;
 
   const { data, loading, error, fetchMore } = useQuery(GET_RECENT_ACTIVITY, {
-    variables: { limit: PAGE_SIZE },
+    variables: { limit: PAGE_SIZE, offset: 0 },
   });
 
   // Create a unique list of activities by ID to prevent duplicate rendering
@@ -54,13 +54,12 @@ export default function ActivitiesPage() {
   const loadMore = () => {
     if (uniqueActivities.length === 0) return;
 
-    // Get the ID of the last item to use as cursor
-    const lastActivityId = uniqueActivities[uniqueActivities.length - 1].id;
-
+    const nextOffset = page * PAGE_SIZE;
+    
     fetchMore({
       variables: {
         limit: PAGE_SIZE,
-        cursor: lastActivityId,
+        offset: nextOffset,
       },
       updateQuery: (prev, { fetchMoreResult }) => {
         if (!fetchMoreResult) return prev;
@@ -121,9 +120,32 @@ export default function ActivitiesPage() {
                     <Text fontWeight="medium">{activity.userName}</Text>
                   </Flex>
                   <Text fontSize="sm" color="gray.500">
-                    {formatDistanceToNow(new Date(activity.timestamp), {
-                      addSuffix: true,
-                    })}
+                    {(() => {
+                      try {
+                        // Handle different timestamp formats
+                        if (!activity.timestamp) return 'recently';
+                        
+                        let date;
+                        if (typeof activity.timestamp === 'object' && activity.timestamp._seconds) {
+                          // Firestore timestamp object
+                          date = new Date(activity.timestamp._seconds * 1000);
+                        } else if (typeof activity.timestamp === 'string') {
+                          // ISO string
+                          date = new Date(activity.timestamp);
+                        } else {
+                          return 'recently';
+                        }
+                        
+                        // Verify it's a valid date
+                        if (isNaN(date.getTime())) {
+                          return 'recently';
+                        }
+                        
+                        return formatDistanceToNow(date, { addSuffix: true });
+                      } catch (err) {
+                        return 'recently';
+                      }
+                    })()}
                   </Text>
                 </Flex>
                 <Text mt={2}>{activity.description}</Text>

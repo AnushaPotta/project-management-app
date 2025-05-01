@@ -1,0 +1,68 @@
+// Add this to the Mutation section of your resolvers.ts file
+    // Update member role
+    updateMemberRole: async (_: any, { boardId, memberId, role }: { boardId: string; memberId: string; role: string }, context: Context) => {
+      // Get user from context passed by the GraphQL server
+      const user = context.user;
+      
+      if (!user) {
+        throw new GraphQLError('Not authenticated', {
+          extensions: {
+            code: 'UNAUTHENTICATED',
+          },
+        });
+      }
+
+      try {
+        // Check if the user is the owner of the board
+        const boardDoc = await getDoc(doc(db, 'boards', boardId));
+        
+        if (!boardDoc.exists()) {
+          throw new GraphQLError('Board not found', {
+            extensions: {
+              code: 'NOT_FOUND',
+            },
+          });
+        }
+        
+        const board = { id: boardDoc.id, ...boardDoc.data() };
+        
+        // Only the board owner can change roles unless the user is changing their own role
+        const isChangingSelf = memberId && user.uid === board.userId;
+        
+        if (board.userId !== user.uid && !isChangingSelf) {
+          throw new GraphQLError('Not authorized to update roles on this board', {
+            extensions: {
+              code: 'UNAUTHORIZED',
+            },
+          });
+        }
+
+        // Update the role in the boardMembers collection
+        const memberRef = doc(db, 'boardMembers', memberId);
+        await updateDoc(memberRef, {
+          role,
+          updatedAt: serverTimestamp(),
+        });
+        
+        // Log the activity
+        await logActivity({
+          userId: user.uid,
+          action: 'update_member_role',
+          boardId,
+          description: `${user.displayName || user.email} updated a member's role to ${role}`,
+        });
+        
+        return {
+          id: boardId,
+          members: await resolvers.Board.members({ id: boardId }),
+        };
+      } catch (error) {
+        console.error('Failed to update member role:', error);
+        throw new GraphQLError('Failed to update member role', {
+          extensions: {
+            code: 'INTERNAL_SERVER_ERROR',
+            error: error instanceof Error ? error.message : String(error)
+          },
+        });
+      }
+    },

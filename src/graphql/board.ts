@@ -62,8 +62,8 @@ export const GET_BOARD = gql`
 `;
 
 export const CREATE_BOARD = gql`
-  mutation CreateBoard($input: CreateBoardInput!) {
-    createBoard(input: $input) {
+  mutation CreateBoard($title: String!, $description: String) {
+    createBoard(title: $title, description: $description) {
       id
       title
       description
@@ -92,6 +92,12 @@ export const UPDATE_BOARD = gql`
       background
       isStarred
     }
+  }
+`;
+
+export const DELETE_BOARD = gql`
+  mutation DeleteBoard($id: ID!) {
+    deleteBoard(id: $id)
   }
 `;
 
