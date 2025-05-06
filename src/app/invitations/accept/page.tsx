@@ -16,18 +16,79 @@ import {
 } from '@chakra-ui/react';
 
 export default function AcceptInvitationPage() {
+  // All hooks must be at the top level
   const searchParams = useSearchParams();
   const router = useRouter();
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [boardName, setBoardName] = useState('Board');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   
+  // Extract URL parameters
   const boardId = searchParams.get('boardId');
   const memberId = searchParams.get('memberId');
   
+  // Auth state
+  const auth = getAuth();
+  
+  // Effect for checking authentication
   useEffect(() => {
-    if (!boardId || !memberId) {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsAuthenticated(!!user);
+    });
+    
+    return () => unsubscribe();
+  }, [auth]);
+  
+  // Effect for storing invitation in localStorage for non-authenticated users
+  useEffect(() => {
+    if (!isAuthenticated && boardId && memberId) {
+      localStorage.setItem('pendingInvitation', JSON.stringify({
+        boardId,
+        memberId,
+        timestamp: Date.now()
+      }));
+      console.log('Stored invitation details in localStorage before redirecting to login');
+    }
+  }, [isAuthenticated, boardId, memberId]);
+  
+  // Effect for loading/validating invitation parameters
+  useEffect(() => {
+    // First check URL parameters
+    let currentBoardId = boardId;
+    let currentMemberId = memberId;
+    
+    // If parameters are missing, check localStorage for saved invitation
+    if (!currentBoardId || !currentMemberId) {
+      try {
+        const savedInvitation = localStorage.getItem('pendingInvitation');
+        if (savedInvitation) {
+          const { boardId: savedBoardId, memberId: savedMemberId, timestamp } = JSON.parse(savedInvitation);
+          
+          // Only use saved invitation if it's less than 30 minutes old
+          const thirtyMinutesInMs = 30 * 60 * 1000;
+          if (timestamp && Date.now() - timestamp < thirtyMinutesInMs) {
+            currentBoardId = savedBoardId;
+            currentMemberId = savedMemberId;
+            
+            // Update the URL to include these parameters (for better UX)
+            if (currentBoardId && currentMemberId) {
+              router.replace(`/invitations/accept?boardId=${currentBoardId}&memberId=${currentMemberId}`);
+            }
+            
+            console.log('Restored invitation details from localStorage');
+          } else {
+            // Clear expired invitation
+            localStorage.removeItem('pendingInvitation');
+          }
+        }
+      } catch (error) {
+        console.error('Error restoring invitation from localStorage:', error);
+      }
+    }
+    
+    if (!currentBoardId || !currentMemberId) {
       setError('Invalid invitation link. Missing required parameters.');
       setLoading(false);
       return;
@@ -36,8 +97,9 @@ export default function AcceptInvitationPage() {
     // Just stop loading after checking parameters
     // We'll fetch details when user clicks accept
     setLoading(false);
-  }, [boardId, memberId]);
+  }, [boardId, memberId, router]);
   
+  // Function to handle invitation acceptance
   const acceptInvitation = async () => {
     console.log('Accept invitation button clicked');
     console.log('BoardId:', boardId, 'MemberId:', memberId);
@@ -51,6 +113,9 @@ export default function AcceptInvitationPage() {
       isClosable: true,
     });
     
+    // Clear any stored invitation on successful acceptance
+    localStorage.removeItem('pendingInvitation');
+    
     if (!boardId || !memberId) {
       console.error('Missing boardId or memberId');
       toast({
@@ -63,7 +128,6 @@ export default function AcceptInvitationPage() {
       return;
     }
     
-    const auth = getAuth();
     const user = auth.currentUser;
     
     if (!user) {
@@ -128,7 +192,7 @@ export default function AcceptInvitationPage() {
       
       toast({
         title: 'Failed to accept invitation',
-        description: error.message || 'An error occurred while trying to accept the invitation.',
+        description: error instanceof Error ? error.message : 'An error occurred while trying to accept the invitation.',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -137,6 +201,7 @@ export default function AcceptInvitationPage() {
     }
   };
   
+  // Render loading state
   if (loading) {
     return (
       <Center minH="100vh">
@@ -148,6 +213,7 @@ export default function AcceptInvitationPage() {
     );
   }
   
+  // Render error state
   if (error) {
     return (
       <Container maxW="container.md" py={10}>
@@ -166,9 +232,8 @@ export default function AcceptInvitationPage() {
     );
   }
   
-  // Check if user is not logged in
-  const auth = getAuth();
-  if (!auth.currentUser) {
+  // Render unauthenticated state
+  if (!isAuthenticated) {
     return (
       <Container maxW="container.md" py={10}>
         <VStack spacing={6} align="center">
@@ -178,7 +243,10 @@ export default function AcceptInvitationPage() {
           <Text fontSize="lg" textAlign="center">
             You need to sign in to accept this invitation.
           </Text>
-          <Button colorScheme="purple" onClick={() => router.push('/login')}>
+          <Text fontSize="md" color="gray.500" textAlign="center">
+            After signing in, you'll be returned to this page to complete the invitation process.
+          </Text>
+          <Button colorScheme="purple" size="lg" onClick={() => router.push('/login')}>
             Sign In
           </Button>
         </VStack>
@@ -186,6 +254,7 @@ export default function AcceptInvitationPage() {
     );
   }
   
+  // Render authenticated state with invitation
   return (
     <Container maxW="container.md" py={10}>
       <VStack spacing={8} align="center">

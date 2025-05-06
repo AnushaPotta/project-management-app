@@ -75,6 +75,23 @@ function LoginContent() {
     setIsEmailLoading(true);
     try {
       await login(email, password);
+      
+      // Check if there's a pending invitation in localStorage
+      const savedInvitation = localStorage.getItem('pendingInvitation');
+      if (savedInvitation) {
+        try {
+          const { boardId, memberId } = JSON.parse(savedInvitation);
+          if (boardId && memberId) {
+            console.log('Found pending invitation, redirecting to accept page');
+            router.push(`/invitations/accept?boardId=${boardId}&memberId=${memberId}`);
+            return;
+          }
+        } catch (err) {
+          console.error('Error parsing pending invitation:', err);
+        }
+      }
+      
+      // Default redirect to dashboard if no pending invitation
       router.push("/dashboard");
     } catch (error) {
       const firebaseError = error as FirebaseError;
@@ -93,6 +110,23 @@ function LoginContent() {
     setIsGoogleLoading(true);
     try {
       await signInWithGoogle();
+      
+      // Check if there's a pending invitation in localStorage
+      const savedInvitation = localStorage.getItem('pendingInvitation');
+      if (savedInvitation) {
+        try {
+          const { boardId, memberId } = JSON.parse(savedInvitation);
+          if (boardId && memberId) {
+            console.log('Found pending invitation after Google login, redirecting to accept page');
+            router.push(`/invitations/accept?boardId=${boardId}&memberId=${memberId}`);
+            return;
+          }
+        } catch (err) {
+          console.error('Error parsing pending invitation:', err);
+        }
+      }
+      
+      // Default redirect to dashboard if no pending invitation
       router.push("/dashboard");
     } catch (error) {
       const firebaseError = error as FirebaseError;
