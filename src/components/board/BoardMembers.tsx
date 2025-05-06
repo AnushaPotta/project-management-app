@@ -3,13 +3,14 @@ import {
   Box,
   Avatar,
   AvatarGroup,
+  Badge,
   Button,
   Modal,
   ModalOverlay,
   ModalContent,
   ModalHeader,
-  ModalBody,
   ModalCloseButton,
+  ModalBody,
   Input,
   VStack,
   HStack,
@@ -99,12 +100,27 @@ export function BoardMembers({
                         src={member.avatar}
                       />
                       <Box>
-                        <HStack>
-                          <Text fontWeight="bold">{member.name}</Text>
+                        <HStack spacing={2}>
+                          <Text fontWeight="bold">{member.name || member.email}</Text>
                           {member.role === 'ADMIN' && (
                             <Text fontSize="xs" color="purple.500" fontWeight="bold">
                               ADMIN
                             </Text>
+                          )}
+                          {member.role === 'MEMBER' && (
+                            <Text fontSize="xs" color="blue.500" fontWeight="bold">
+                              MEMBER
+                            </Text>
+                          )}
+                          {member.status === 'PENDING' && (
+                            <Badge colorScheme="yellow" fontSize="xs">
+                              PENDING
+                            </Badge>
+                          )}
+                          {member.status === 'ACCEPTED' && (
+                            <Badge colorScheme="green" fontSize="xs">
+                              ACTIVE
+                            </Badge>
                           )}
                         </HStack>
                         <Text fontSize="sm" color="gray.500">

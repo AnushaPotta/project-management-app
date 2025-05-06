@@ -23,6 +23,33 @@ import {
 // Admin Firestore instance for server-side operations
 const adminDb = admin.firestore();
 
+// Helper function to delete a collection
+async function deleteCollection(collectionRef: any) {
+  const batch = adminDb.batch();
+  const snapshot = await collectionRef.get();
+  
+  // Nothing to delete
+  if (snapshot.empty) {
+    return;
+  }
+  
+  // Add up to 500 documents to delete to the batch
+  snapshot.docs.forEach((doc: any) => {
+    batch.delete(doc.ref);
+  });
+  
+  // Commit the batch
+  await batch.commit();
+  
+  // If there are more documents, recursively delete them
+  if (snapshot.size >= 500) {
+    // Wait a little bit to avoid overloading Firestore
+    await new Promise(resolve => setTimeout(resolve, 200));
+    // Delete the next batch
+    await deleteCollection(collectionRef);
+  }
+}
+
 interface Context {
   user: any; // Replace with actual user type
 }
@@ -51,35 +78,75 @@ export const resolvers = {
     createdAt: (parent: any) => formatTimestamp(parent.createdAt),
     updatedAt: (parent: any) => parent.updatedAt ? formatTimestamp(parent.updatedAt) : null,
     
-    // Board members resolver
-    members: async (parent: any) => {
+    // Get board members
+    members: async (parent: { id: string }) => {
       try {
-        // Use Admin SDK consistently
-        const membersRef = adminDb.collection('boardMembers');
-        const querySnapshot = await membersRef.where('boardId', '==', parent.id).get();
-      
-        const members = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-      
-        // Fetch user data for each member
-        const membersWithUsers = await Promise.all(
-          members.map(async (member: any) => {
-            if (member.userId) {
-              const userDoc = await adminDb.collection('users').doc(member.userId).get();
-              if (userDoc.exists) {
-                member.user = {
-                  id: userDoc.id,
-                  ...userDoc.data()
-                };
-              }
-            }
-            return member;
-          })
-        );
-      
-        return membersWithUsers;
+        console.log(`Fetching members for board: ${parent.id}`);
+        
+        // First, get the board details to find the creator
+        const boardDoc = await adminDb.collection('boards').doc(parent.id).get();
+        if (!boardDoc.exists) {
+          console.log(`Board ${parent.id} not found`);
+          return [];
+        }
+        
+        const boardData = boardDoc.data();
+        const creatorId = boardData?.userId; // Board creator's ID
+        console.log(`Board creator ID: ${creatorId}`);
+        
+        // Check for board members in the members subcollection
+        const membersRef = adminDb.collection('boards').doc(parent.id).collection('members');
+        const membersSnapshot = await membersRef.get();
+        
+        console.log(`Found ${membersSnapshot.docs.length} members in subcollection`);
+        
+        let membersList = membersSnapshot.docs.map(memberDoc => {
+          console.log(`Member from DB: ID=${memberDoc.id}, data=`, memberDoc.data());
+          return {
+            id: memberDoc.id,
+            ...memberDoc.data(),
+          };
+        });
+        
+        // Check if the creator is already in the members list
+        const creatorExists = membersList.some(member => member.id === creatorId);
+        console.log(`Creator exists in members list: ${creatorExists}`);
+        
+        // If creator isn't in the members list, add them as an admin
+        if (!creatorExists && creatorId) {
+          console.log(`Adding creator ${creatorId} as admin`);
+          
+          // Get creator's user info
+          const userDoc = await adminDb.collection('users').doc(creatorId).get();
+          let userData = null;
+          
+          if (userDoc.exists) {
+            userData = userDoc.data();
+            console.log(`Found creator user data:`, userData);
+          } else {
+            console.log(`Creator user data not found`);
+          }
+          
+          // Create admin member record for creator
+          const creatorMember = {
+            id: creatorId,
+            name: userData?.name || userData?.displayName || 'Admin',
+            email: userData?.email || '',
+            role: 'ADMIN',
+            status: 'ACCEPTED',
+            joinedAt: firestore.FieldValue.serverTimestamp()
+          };
+          
+          // Add to Firestore for future queries
+          console.log(`Saving creator as admin to database:`, creatorMember);
+          await membersRef.doc(creatorId).set(creatorMember);
+          
+          // Also add to the current response
+          membersList.push(creatorMember);
+        }
+        
+        // Now we have all the members including the creator as admin if needed
+        return membersList;
       } catch (error) {
         console.error('Error fetching board members:', error);
         return [];
@@ -106,21 +173,91 @@ export const resolvers = {
         }
 
         console.log("Fetching boards for user:", user.uid);
+        const boardIds = new Set();
+        const boardsData = [];
 
-        // Query on memberIds field
+        // 1. First query boards where user is in memberIds (created by user or added directly)
         const boardsRef = adminDb.collection("boards");
-        const snapshot = await boardsRef
+        const ownerSnapshot = await boardsRef
           .where("memberIds", "array-contains", user.uid)
           .get();
 
-        return snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        ownerSnapshot.docs.forEach(doc => {
+          boardIds.add(doc.id);
+          boardsData.push({
+            id: doc.id,
+            ...doc.data()
+          });
+        });
+
+        // 2. Then find boards where user is in the members subcollection (invited and accepted)
+        console.log(`Checking for boards where user ${user.uid} is a member via subcollection`);
+        const boardsCollection = adminDb.collection('boards');
+        
+        // Get all boards
+        const allBoardsSnapshot = await boardsCollection.get();
+        console.log(`Checking through ${allBoardsSnapshot.docs.length} boards for user membership`);
+        
+        // For each board, check if user is a member with ACCEPTED status
+        for (const boardDoc of allBoardsSnapshot.docs) {
+          const boardId = boardDoc.id;
+          // Skip boards we already have
+          if (boardIds.has(boardId)) {
+            continue;
+          }
+          
+          console.log(`Checking board ${boardId} for user membership`);
+          const membersRef = boardDoc.ref.collection('members');
+          
+          // First, let's just get all members in this board to see what's there
+          const allMembersSnapshot = await membersRef.get();
+          console.log(`Board ${boardId} has ${allMembersSnapshot.docs.length} total members`);
+          
+          // Log all members for debugging
+          allMembersSnapshot.docs.forEach(memberDoc => {
+            const memberData = memberDoc.data();
+            console.log(`Member in board ${boardId}: ID=${memberDoc.id}, Email=${memberData.email}, UserId=${memberData.userId}, Status=${memberData.status}`);
+          });
+          
+          // Now try the specific query for this user
+          // First check if they have a membership by userId
+          const memberQueryByUserId = await membersRef
+            .where('userId', '==', user.uid)
+            .where('status', '==', 'ACCEPTED')
+            .get();
+          
+          console.log(`Query for userId=${user.uid} in board ${boardId} returned ${memberQueryByUserId.docs.length} results`);
+          
+          // If no results by userId, check by email (as a fallback)
+          let isMember = !memberQueryByUserId.empty;
+          
+          if (!isMember && user.email) {
+            const memberQueryByEmail = await membersRef
+              .where('email', '==', user.email)
+              .where('status', '==', 'ACCEPTED')
+              .get();
+            
+            console.log(`Query for email=${user.email} in board ${boardId} returned ${memberQueryByEmail.docs.length} results`);
+            isMember = !memberQueryByEmail.empty;
+          }
+          
+          // If user is a member of this board, add it to the results
+          if (isMember) {
+            boardIds.add(boardId);
+            boardsData.push({
+              id: boardId,
+              ...boardDoc.data()
+            });
+            console.log(`Added board ${boardId} to user's boards list`);
+          }
+        }
+
+        console.log(`Found ${boardsData.length} boards for user ${user.uid}`);
+        return boardsData;
       } catch (error) {
         console.error("Error fetching boards:", error);
         throw error;
-      }
+      }  
     },
 
     // Get a specific board by ID
@@ -138,14 +275,42 @@ export const resolvers = {
         }
 
         const boardData = boardDoc.data();
+        
+        // Get members ref first so we can use it for permission checks
+        const membersRef = boardRef.collection("members");
 
-        // Check if user is a member
-        if (!boardData?.memberIds?.includes(user.uid)) {
+        // Check if user is a member - first check memberIds array
+        let isMember = boardData?.memberIds?.includes(user.uid) || boardData?.userId === user.uid;
+        
+        // If not in memberIds, check the members subcollection
+        if (!isMember) {
+          console.log(`Checking if user ${user.uid} is in members subcollection for board ${id}`);
+          
+          // Get members with this user's ID in the userId field
+          const memberQuery = await membersRef
+            .where('userId', '==', user.uid)
+            .where('status', '==', 'ACCEPTED')
+            .get();
+            
+          // Also check if user's email matches (in case userId isn't set yet)
+          let memberEmailQuery = null;
+          if (user.email) {
+            memberEmailQuery = await membersRef
+              .where('email', '==', user.email)
+              .where('status', '==', 'ACCEPTED')
+              .get();
+          }
+          
+          // Check if user is in members collection with ACCEPTED status
+          isMember = !memberQuery.empty || (memberEmailQuery && !memberEmailQuery.empty);
+          
+          console.log(`User ${user.uid} member status for board ${id}: ${isMember}`);
+        }
+        
+        // Final permission check
+        if (!isMember) {
           throw new Error("Not authorized to view this board");
         }
-
-        // Get members
-        const membersRef = boardRef.collection("members");
         const membersSnapshot = await membersRef.get();
         let members = membersSnapshot.docs.map(memberDoc => ({
           id: memberDoc.id,
@@ -825,8 +990,8 @@ export const resolvers = {
         throw error;
       }
     },
-
-    // Delete a board
+    
+    // Delete a board and all related data
     deleteBoard: async (_, { id }, { user }) => {
       if (!user) {
         throw new Error("Not authenticated");
@@ -841,14 +1006,69 @@ export const resolvers = {
         }
 
         const boardData = boardDoc.data();
-        if (boardData.userId !== user.uid) {
-          throw new Error("Not authorized to delete this board");
+        
+        // Check authorization - either owner or admin
+        const isOwner = boardData.userId === user.uid;
+        let isAdmin = false;
+        
+        if (!isOwner) {
+          // Check if the user is an admin member
+          const membersRef = boardRef.collection('members');
+          const adminMemberQuery = await membersRef
+            .where('id', '==', user.uid)
+            .where('role', '==', 'ADMIN')
+            .get();
+            
+          isAdmin = !adminMemberQuery.empty;
+          
+          if (!isAdmin) {
+            throw new Error("Not authorized to delete this board");
+          }
         }
-
-        // Delete the board
+        
+        console.log(`Deleting board ${id} and all related data`);
+        
+        // 1. Delete all members in the members subcollection
+        console.log('Deleting board members...');
+        const membersRef = boardRef.collection('members');
+        await deleteCollection(membersRef);
+        
+        // 2. Delete all columns in the columns subcollection
+        console.log('Deleting board columns...');
+        const columnsRef = boardRef.collection('columns');
+        
+        // Get all columns first to delete their cards
+        const columnsSnapshot = await columnsRef.get();
+        for (const columnDoc of columnsSnapshot.docs) {
+          // 3. Delete all cards in each column
+          console.log(`Deleting cards for column ${columnDoc.id}...`);
+          const cardsRef = columnDoc.ref.collection('cards');
+          await deleteCollection(cardsRef);
+        }
+        
+        // Now delete all columns
+        await deleteCollection(columnsRef);
+        
+        // 4. Delete all related activities
+        console.log('Deleting board activities...');
+        const activitiesRef = adminDb.collection('activities');
+        const activitiesSnapshot = await activitiesRef
+          .where('boardId', '==', id)
+          .get();
+          
+        if (!activitiesSnapshot.empty) {
+          const batch = adminDb.batch();
+          activitiesSnapshot.docs.forEach(doc => {
+            batch.delete(doc.ref);
+          });
+          await batch.commit();
+        }
+        
+        // 5. Finally delete the board itself
+        console.log('Deleting the board document...');
         await boardRef.delete();
 
-        // Log activity
+        // Log activity about the deletion
         await logActivity({
           type: "BOARD_DELETED",
           userId: user.uid,
@@ -856,6 +1076,7 @@ export const resolvers = {
           data: { title: boardData.title },
         });
 
+        console.log(`Board ${id} successfully deleted with all related data`);
         // Return true to indicate successful deletion
         return true;
       } catch (error) {
@@ -1050,10 +1271,9 @@ export const resolvers = {
           existingUserId = userQuerySnapshot.docs[0].id;
         }
 
-        // Check if the member has already been invited - Use Admin SDK
-        const membersRef = adminDb.collection('boardMembers');
-        const memberQuerySnapshot = await membersRef
-          .where('boardId', '==', boardId)
+        // Check if the member has already been invited - Use the board's members subcollection
+        const boardMembersRef = adminDb.collection('boards').doc(boardId).collection('members');
+        const memberQuerySnapshot = await boardMembersRef
           .where('email', '==', email)
           .get();
         
@@ -1065,20 +1285,38 @@ export const resolvers = {
           });
         }
 
-        // Create a member invitation - Use Admin SDK
+        // Create a member invitation in the board's members subcollection
         const memberData = {
-          boardId,
+          id: existingUserId || email.replace(/[^a-zA-Z0-9]/g, '_'), // Use userId if available, otherwise create an ID from email
           email,
           status: 'PENDING',
+          role: 'MEMBER', // Set default role to MEMBER instead of null
           userId: existingUserId,
           createdAt: firestore.FieldValue.serverTimestamp(),
           updatedAt: firestore.FieldValue.serverTimestamp(),
         };
         
-        const memberRef = await adminDb.collection('boardMembers').add(memberData);
+        // Generate a unique ID for the member document if we don't have a user ID
+        const memberId = existingUserId || `${Date.now()}_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        
+        // Store in the board's members subcollection
+        const memberRef = boardMembersRef.doc(memberId);
+        await memberRef.set(memberData);
+        
+        // Verify the member was saved properly
+        const verifyDoc = await memberRef.get();
+        if (!verifyDoc.exists) {
+          console.error('Failed to save member to database - verification failed');
+          throw new GraphQLError('Failed to save member to database', {
+            extensions: {
+              code: 'INTERNAL_SERVER_ERROR',
+            },
+          });
+        }
+        console.log('Successfully saved member to database:', verifyDoc.data());
 
-        // Generate invitation link with the member ID
-        const invitationLink = `${process.env.NEXT_PUBLIC_APP_URL}/api/invitations/accept?id=${memberRef.id}`;
+        // Generate invitation link with the board ID and member ID
+        const invitationLink = `${process.env.NEXT_PUBLIC_APP_URL}/api/invitations/accept?boardId=${boardId}&memberId=${memberRef.id}`;
 
         // Try to send invitation email, but continue even if it fails
         try {
