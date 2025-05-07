@@ -49,6 +49,7 @@ export const typeDefs = `#graphql
     description: String
     background: String
     isStarred: Boolean
+    isArchived: Boolean
     createdAt: String!
     updatedAt: String!
     members: [User]
@@ -66,6 +67,7 @@ export const typeDefs = `#graphql
     description: String
     background: String
     isStarred: Boolean
+    isArchived: Boolean
   }
 
   input CardInput {

@@ -1,8 +1,9 @@
 // src/components/board/BoardHeader.tsx
-import { Flex, Heading, Button, ButtonGroup, Input } from "@chakra-ui/react";
-import { FiStar, FiUsers } from "react-icons/fi";
+import { Flex, Heading, Button, ButtonGroup, Input, IconButton, Tooltip } from "@chakra-ui/react";
+import { FiStar, FiUsers, FiArrowLeft } from "react-icons/fi";
 import { useState } from "react";
 import { BoardMenu } from "./BoardMenu";
+import { useRouter } from "next/navigation";
 interface BoardHeaderProps {
   title: string;
   members: number;
@@ -28,6 +29,7 @@ export function BoardHeader({
 }: BoardHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [newTitle, setNewTitle] = useState(title);
+  const router = useRouter();
 
   const handleTitleSubmit = () => {
     if (newTitle.trim() !== "") {
@@ -44,6 +46,16 @@ export function BoardHeader({
       bg="rgba(255, 255, 255, 0.3)"
     >
       <Flex align="center" gap={4}>
+        <Tooltip label="Back to Boards">
+          <IconButton
+            icon={<FiArrowLeft />}
+            aria-label="Back to Boards"
+            variant="ghost"
+            onClick={() => router.push('/dashboard')}
+            mr={2}
+          />
+        </Tooltip>
+        
         {isEditing ? (
           <Input
             value={newTitle}

@@ -8,6 +8,7 @@ export const GET_USER_BOARDS = gql`
       title
       description
       isStarred
+      isArchived
       createdAt
       updatedAt
       columns {
@@ -67,6 +68,7 @@ export const CREATE_BOARD = gql`
       id
       title
       description
+      isArchived
       createdAt
       updatedAt
       columns {
@@ -91,6 +93,17 @@ export const UPDATE_BOARD = gql`
       description
       background
       isStarred
+      isArchived
+    }
+  }
+`;
+
+export const ARCHIVE_BOARD = gql`
+  mutation ArchiveBoard($id: ID!) {
+    updateBoard(id: $id, input: { isArchived: true }) {
+      id
+      title
+      isArchived
     }
   }
 `;

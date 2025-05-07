@@ -6,6 +6,7 @@ import {
   MenuItem,
   MenuDivider,
   IconButton,
+  useColorModeValue,
 } from "@chakra-ui/react";
 import { FiMoreHorizontal, FiTrash2, FiArchive, FiEdit } from "react-icons/fi";
 
@@ -16,6 +17,9 @@ interface BoardMenuProps {
 }
 
 export function BoardMenu({ onArchive, onDelete, onEdit }: BoardMenuProps) {
+  // Colors for better readability
+  const archiveColor = useColorModeValue("blue.600", "blue.300");
+  const archiveBg = useColorModeValue("blue.50", "blue.900");
   return (
     <Menu>
       <MenuButton
@@ -28,7 +32,14 @@ export function BoardMenu({ onArchive, onDelete, onEdit }: BoardMenuProps) {
         <MenuItem icon={<FiEdit />} onClick={onEdit}>
           Edit Board Details
         </MenuItem>
-        <MenuItem icon={<FiArchive />} onClick={onArchive}>
+        <MenuItem 
+          icon={<FiArchive />} 
+          onClick={onArchive} 
+          color={archiveColor}
+          bg={archiveBg}
+          fontWeight="medium"
+          _hover={{ bg: useColorModeValue("blue.100", "blue.800"), color: useColorModeValue("blue.700", "blue.100") }}
+        >
           Archive Board
         </MenuItem>
         <MenuDivider />

@@ -125,10 +125,11 @@ export default function BoardsPage() {
           existingData?.boards?.length || 0
         );
 
-        // Add isStarred field with default value if it's missing
+        // Add default values for any potentially missing fields
         const newBoard = {
           ...data.createBoard,
-          isStarred: data.createBoard.isStarred ?? false // Default to false if not present
+          isStarred: data.createBoard.isStarred ?? false, // Default to false if not present
+          isArchived: data.createBoard.isArchived ?? false // Default to false if not present
         };
 
         // Write back to the cache with the new board included

@@ -1011,7 +1011,7 @@ export const resolvers = {
     },
 
     // Update a board
-    updateBoard: async (_, { id, input }, { user }) => {
+    updateBoard: async (_, { id, title, description, isStarred }, { user }) => {
       if (!user) {
         throw new Error("Not authenticated");
       }
@@ -1033,13 +1033,16 @@ export const resolvers = {
           updatedAt: firestore.FieldValue.serverTimestamp(),
         };
 
-        // Spread input object properties to updateData
-        if (input) {
-          if (input.title !== undefined) updateData.title = input.title;
-          if (input.description !== undefined) updateData.description = input.description;
-          if (input.isStarred !== undefined) updateData.isStarred = input.isStarred;
-          if (input.isArchived !== undefined) updateData.isArchived = input.isArchived;
-          if (input.background !== undefined) updateData.background = input.background;
+        if (title !== undefined) {
+          updateData.title = title;
+        }
+
+        if (description !== undefined) {
+          updateData.description = description;
+        }
+
+        if (isStarred !== undefined) {
+          updateData.isStarred = isStarred;
         }
 
         await boardRef.update(updateData);
@@ -1049,7 +1052,7 @@ export const resolvers = {
           type: "BOARD_UPDATED",
           userId: user.uid,
           boardId: id,
-          data: { title: updateData.title || boardData.title },
+          data: { title },
         });
 
         return {
@@ -1130,6 +1133,9 @@ export const resolvers = {
         console.log(`Board ${id} successfully deleted with all related data`);
         // Return true to indicate successful deletion
         return true;
+      } catch (error) {
+        console.error("Error deleting board:", error);
+        throw error;
       }
     },
     

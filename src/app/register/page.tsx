@@ -50,6 +50,22 @@ export default function RegisterPage() {
         duration: 5000,
       });
 
+      // Check if there's a pending invitation in localStorage
+      const savedInvitation = localStorage.getItem('pendingInvitation');
+      if (savedInvitation) {
+        try {
+          const { boardId, memberId } = JSON.parse(savedInvitation);
+          if (boardId && memberId) {
+            console.log('Found pending invitation after registration, redirecting to accept page');
+            router.push(`/invitations/accept?boardId=${boardId}&memberId=${memberId}`);
+            return;
+          }
+        } catch (err) {
+          console.error('Error parsing pending invitation:', err);
+        }
+      }
+      
+      // Default redirect to dashboard if no pending invitation
       router.push("/dashboard");
     } catch (error: unknown) {
       console.error("Registration error:", error);

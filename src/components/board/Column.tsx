@@ -58,12 +58,84 @@ export default function Column({
   const [deleteColumnMutation] = useMutation(DELETE_COLUMN_MUTATION);
 
   const findCardByProperties = (boardData, title, columnId) => {
+    if (!boardData || !boardData.columns) return null;
+    
     for (const column of boardData.columns) {
-      if (column.id === columnId) {
-        return column.cards.find((card) => card.title === title);
+      if (column.id === columnId && column.cards) {
+        return column.cards.find((card) => card && card.title === title);
       }
     }
     return null;
+  };
+
+  const handleCardUpdate = (updatedCard) => {
+    // Safety check - if updatedCard is null or undefined, do nothing
+    if (!updatedCard || typeof updatedCard !== 'object' || !updatedCard.id) {
+      console.error("Error: Received invalid card data in handleCardUpdate", updatedCard);
+      return;
+    }
+
+    // Make sure column and column.cards exist before trying to map
+    if (!column || !Array.isArray(column.cards)) {
+      console.error("Error: Column or column.cards is invalid", column);
+      return;
+    }
+
+    // Find and update the specific card within this column
+    const updatedCards = column.cards.map((card) =>
+      card && card.id === updatedCard.id ? updatedCard : card
+    );
+
+    // Create updated column with new cards array
+    const updatedColumn = {
+      ...column,
+      cards: updatedCards,
+    };
+
+    // Check if board and board.columns exist before accessing them
+    if (!board || !Array.isArray(board.columns)) {
+      console.error("Error: Board or board.columns is invalid", board);
+      return;
+    }
+
+    // Pass this change up to the board level
+    onBoardChange({
+      ...board,
+      columns: board.columns.map((col) =>
+        col && col.id === column.id ? updatedColumn : col
+      ),
+    });
+  };
+
+  // Function to handle deleting a card
+  const handleDeleteCard = (cardId) => {
+    if (!cardId || !column || !Array.isArray(column.cards)) {
+      console.error("Invalid card ID or column data");
+      return;
+    }
+
+    // Remove the card from this column's cards array
+    const updatedCards = column.cards.filter((card) => card && card.id !== cardId);
+
+    // Create an updated column with the card removed
+    const updatedColumn = {
+      ...column,
+      cards: updatedCards,
+    };
+
+    if (!board || !Array.isArray(board.columns)) {
+      console.error("Invalid board data");
+      return;
+    }
+
+    const updatedBoard = {
+      ...board,
+      columns: board.columns.map((col) =>
+        col && col.id === column.id ? updatedColumn : col
+      ),
+    };
+
+    onBoardChange(updatedBoard);
   };
 
   const handleAddCard = async () => {
@@ -88,7 +160,7 @@ export default function Column({
 
       // Find the column index while maintaining the current order
       const columnIndex = updatedBoard.columns.findIndex(
-        (col) => col.id === column.id
+        (col) => col && col.id === column.id
       );
 
       if (columnIndex !== -1) {
@@ -96,7 +168,7 @@ export default function Column({
         updatedBoard.columns = [...updatedBoard.columns];
         updatedBoard.columns[columnIndex] = {
           ...updatedBoard.columns[columnIndex],
-          cards: [...updatedBoard.columns[columnIndex].cards, newCard],
+          cards: [...(updatedBoard.columns[columnIndex].cards || []), newCard],
         };
 
         // STEP 4: Update UI immediately (optimistic update)
@@ -126,12 +198,12 @@ export default function Column({
           // Update only that specific card in our current board state
           const finalBoard = { ...updatedBoard };
           const colIndex = finalBoard.columns.findIndex(
-            (col) => col.id === column.id
+            (col) => col && col.id === column.id
           );
 
           if (colIndex !== -1) {
             const cardIndex = finalBoard.columns[colIndex].cards.findIndex(
-              (c) => c.id === optimisticCardId
+              (c) => c && c.id === optimisticCardId
             );
 
             if (cardIndex !== -1) {
@@ -163,6 +235,7 @@ export default function Column({
       });
     }
   };
+
   const updateColumnTitle = async () => {
     if (!columnTitle.trim()) {
       setColumnTitle(column.title); // Reset to original if empty
@@ -251,48 +324,6 @@ export default function Column({
     }
   };
 
-  const handleCardUpdate = (updatedCard) => {
-    // Find and update the specific card within this column
-    const updatedCards = column.cards.map((card) =>
-      card.id === updatedCard.id ? updatedCard : card
-    );
-
-    // Create updated column with new cards array
-    const updatedColumn = {
-      ...column,
-      cards: updatedCards,
-    };
-
-    // Pass this change up to the board level
-    onBoardChange({
-      ...board,
-      columns: board.columns.map((col) =>
-        col.id === column.id ? updatedColumn : col
-      ),
-    });
-  };
-
-  // Add this function in your Column component
-  const handleDeleteCard = (cardId: string) => {
-    // Remove the card from this column's cards array
-    const updatedCards = column.cards.filter((card) => card.id !== cardId);
-
-    // Create an updated column with the card removed
-    const updatedColumn = {
-      ...column,
-      cards: updatedCards,
-    };
-
-    const updatedBoard = {
-      ...board,
-      columns: board.columns.map((col) =>
-        col.id === column.id ? updatedColumn : col
-      ),
-    };
-
-    onBoardChange(updatedBoard);
-  };
-
   return (
     <Draggable draggableId={column.id} index={index}>
       {(provided) => (
@@ -301,27 +332,30 @@ export default function Column({
           {...provided.draggableProps}
           minW="280px"
           maxW="280px"
-          marginRight={2}
-          height="fit-content"
           bg={columnBg}
           borderRadius="md"
           boxShadow="sm"
+          mx={2}
+          display="flex"
+          flexDirection="column"
+          height="fit-content"
+          maxH="calc(100vh - 200px)"
         >
           {/* Column Header */}
           <Flex
             p={2}
-            align="center"
-            justify="space-between"
-            bg={bgColor}
-            borderTopRadius="md"
+            borderBottomWidth="1px"
+            borderBottomColor={bgColor}
+            alignItems="center"
+            justifyContent="space-between"
             {...provided.dragHandleProps}
           >
             {isEditingTitle ? (
               <Input
-                ref={inputRef}
                 value={columnTitle}
                 onChange={(e) => setColumnTitle(e.target.value)}
                 onBlur={updateColumnTitle}
+                ref={inputRef}
                 onKeyPress={(e) => e.key === "Enter" && updateColumnTitle()}
                 size="sm"
                 autoFocus
@@ -381,10 +415,12 @@ export default function Column({
                 p={2}
                 bg={snapshot.isDraggingOver ? bgColor : "transparent"}
                 transition="background-color 0.2s ease"
+                overflowY="auto"
               >
                 {Array.isArray(column.cards) &&
-                  [...column.cards] // Create a copy with spread operator
-                    .sort((a, b) => a.order - b.order)
+                  column.cards
+                    .filter(card => card) // Filter out any null/undefined cards
+                    .sort((a, b) => (a.order || 0) - (b.order || 0))
                     .map((card, cardIndex) => (
                       <Card
                         key={card.id}

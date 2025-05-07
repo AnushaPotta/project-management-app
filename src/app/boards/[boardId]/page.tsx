@@ -31,6 +31,7 @@ import {
 import { Board } from "@/types/board";
 import Column from "@/components/board/Column";
 import AddColumnModal from "@/components/board/AddColumnModal";
+import EditBoardModal from "@/components/board/EditBoardModal";
 import { BoardHeader } from "@/components/board/BoardHeader";
 import { BoardMembers } from "@/components/board/BoardMembers";
 
@@ -39,9 +40,11 @@ export default function BoardPage() {
   const router = useRouter();
   const [board, setBoard] = useState<Board | null>(null);
   const [isAddColumnModalOpen, setIsAddColumnModalOpen] = useState(false);
+  const [isEditBoardModalOpen, setIsEditBoardModalOpen] = useState(false);
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isUpdatingBoard, setIsUpdatingBoard] = useState(false);
 
   const toast = useToast();
   
@@ -428,6 +431,35 @@ export default function BoardPage() {
     }
   };
   
+  // Handle archiving a board - makes it inactive but doesn't delete it
+  const handleArchiveBoard = async () => {
+    if (!board) return;
+    
+    try {
+      const { data } = await updateBoardMutation({
+        variables: {
+          id: board.id,
+          input: { isArchived: true },
+        },
+      });
+
+      if (data?.updateBoard) {
+        toast({
+          title: "Board archived",
+          description: "The board has been archived and moved to the archive section.",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+        
+        // Navigate back to the dashboard after successful archive
+        router.push('/dashboard');
+      }
+    } catch (error) {
+      handleError(error, toast);
+    }
+  };
+
   // Handle board deletion and redirect to boards page
   const handleDeleteBoard = async () => {
     try {
@@ -457,16 +489,73 @@ export default function BoardPage() {
   };
 
   // Handle removing a member from the board
+  // Handle edit board details
+  const handleEditBoard = async (data: { title: string; description: string }) => {
+    if (!board) return;
+    
+    setIsUpdatingBoard(true);
+    try {
+      const { data: updateResult } = await updateBoardMutation({
+        variables: {
+          id: board.id,
+          input: {
+            title: data.title,
+            description: data.description || null,
+          },
+        },
+      });
+
+      if (updateResult?.updateBoard) {
+        setBoard({
+          ...board,
+          title: data.title,
+          description: data.description || null,
+        });
+
+        toast({
+          title: "Board updated",
+          description: "Board details have been updated successfully",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+
+      setIsEditBoardModalOpen(false);
+    } catch (error) {
+      handleError(error, toast);
+    } finally {
+      setIsUpdatingBoard(false);
+    }
+  };
+
   const handleRemoveMember = async (memberId: string) => {
     try {
-      const { data } = await removeMemberMutation({
+      console.log(`Removing member with ID: ${memberId} from board: ${board?.id}`);
+      console.log('Current board members before removal:', board?.members);
+      
+      const response = await removeMemberMutation({
         variables: {
           boardId: board?.id,
           memberId,
         },
+        // Force refetch from network instead of using cache
+        fetchPolicy: 'network-only',
       });
       
+      console.log('Response from removeMember mutation:', response);
+      
+      const { data } = response;
+      
       if (data?.removeMember) {
+        console.log('New members list returned from server:', data.removeMember.members);
+        
+        // Check if the members array is different from before
+        const oldMemberIds = (board?.members || []).map(m => m.id).sort().join(',');
+        const newMemberIds = (data.removeMember.members || []).map(m => m.id).sort().join(',');
+        console.log('Old member IDs:', oldMemberIds);
+        console.log('New member IDs:', newMemberIds);
+        
         // Update the board state with the member removed
         setBoard({
           ...board!,
@@ -475,16 +564,30 @@ export default function BoardPage() {
         
         toast({
           title: "Member removed",
+          description: `Member with ID ${memberId} was removed from the board.`,
           status: "info",
+          duration: 3000,
+          isClosable: true,
+        });
+        
+        // Refetch the board to ensure data is fresh
+        refetch();
+      } else {
+        console.error('No removeMember data returned from the server');
+        toast({
+          title: "Error removing member",
+          description: "The server did not return updated member data",
+          status: "error",
           duration: 3000,
           isClosable: true,
         });
       }
     } catch (error) {
+      console.error('Error in handleRemoveMember:', error);
       handleError(error, toast);
     }
   };
-
+  
   // Add debug info to see if query is loading or if there's an error
   console.log("Is loading:", isLoading);
   console.log("Query error:", queryError);
@@ -543,6 +646,8 @@ export default function BoardPage() {
         onToggleStar={toggleBoardStar}
         onInviteMember={openMembersModal}
         onDelete={handleDeleteBoard}
+        onArchive={handleArchiveBoard}
+        onEdit={() => setIsEditBoardModalOpen(true)}
       />
       
       <BoardMembers
@@ -620,6 +725,18 @@ export default function BoardPage() {
         isOpen={isAddColumnModalOpen}
         onClose={() => setIsAddColumnModalOpen(false)}
         onSubmit={handleAddColumn}
+      />
+
+      {/* Edit Board Modal */}
+      <EditBoardModal
+        isOpen={isEditBoardModalOpen}
+        onClose={() => setIsEditBoardModalOpen(false)}
+        onSubmit={handleEditBoard}
+        initialData={{
+          title: board.title,
+          description: board.description || "",
+        }}
+        isLoading={isUpdatingBoard}
       />
     </Box>
   );
