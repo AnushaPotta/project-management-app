@@ -37,7 +37,31 @@ export default function TaskSummary() {
   // Remove the additional immediate refetch effect that was causing duplicate calls
 
   if (loading) {
-    return <Skeleton height="100px" />;
+    return (
+      <Box p={5} shadow="md" borderWidth="1px" borderRadius="md">
+        <StatGroup>
+          <Stat>
+            <StatLabel><Skeleton height="20px" width="80px" /></StatLabel>
+            <StatNumber><Skeleton height="24px" width="40px" /></StatNumber>
+          </Stat>
+
+          <Stat>
+            <StatLabel><Skeleton height="20px" width="80px" /></StatLabel>
+            <StatNumber><Skeleton height="24px" width="40px" /></StatNumber>
+          </Stat>
+
+          <Stat>
+            <StatLabel><Skeleton height="20px" width="80px" /></StatLabel>
+            <StatNumber><Skeleton height="24px" width="40px" /></StatNumber>
+          </Stat>
+
+          <Stat>
+            <StatLabel><Skeleton height="20px" width="80px" /></StatLabel>
+            <StatNumber><Skeleton height="24px" width="40px" /></StatNumber>
+          </Stat>
+        </StatGroup>
+      </Box>
+    );
   }
   
   // Get the stats directly from GraphQL without any transformation

@@ -104,6 +104,9 @@ export default function AcceptInvitationPage() {
     console.log('Accept invitation button clicked');
     console.log('BoardId:', boardId, 'MemberId:', memberId);
     
+    // Show loading state
+    setLoading(true);
+    
     // Display a toast to confirm the button was clicked
     toast({
       title: 'Processing invitation...',

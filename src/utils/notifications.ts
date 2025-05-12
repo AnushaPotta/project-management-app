@@ -242,3 +242,22 @@ export const createDueDateReminderNotification = async (
     userId
   });
 };
+
+/**
+ * Creates a notification when a member accepts a board invitation
+ */
+export const createInvitationAcceptedNotification = async (
+  userId: string,     // Board owner/admin who will receive the notification
+  memberName: string, // Name of the person who accepted the invitation
+  memberEmail: string,
+  boardTitle: string,
+  boardId: string
+): Promise<string> => {
+  return createNotification({
+    title: 'Invitation Accepted',
+    description: `${memberName || memberEmail} accepted your invitation to board '${boardTitle}'`,
+    type: 'INVITATION_ACCEPTED',
+    targetId: boardId,
+    userId
+  });
+};

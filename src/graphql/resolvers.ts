@@ -876,38 +876,106 @@ upcomingDeadlines: async (_, { days = 7 }, { user }) => {
         const futureDateTimestamp = futureDate.toISOString();
         
         // Get all boards for the user - similar to the taskStats resolver
-        // First get boards the user created
-        const boardsRef = adminDb.collection("boards");
-        let boardsSnapshot = await boardsRef
+        // We need to use the same approach we used for taskStats to ensure consistency
+        console.log(`Fetching boards for upcoming deadlines for user: ${user.uid}`);
+        
+        // Create a set to track unique board IDs and an array to store board documents
+        const boardIds = new Set();
+        let boardDocs = [];
+        
+        // 1. Get boards where user is the direct owner
+        console.log("Getting boards where user is the owner...");
+        const ownedBoardsSnapshot = await adminDb.collection("boards")
           .where("userId", "==", user.uid)
           .get();
-          
-        let boardDocs = [...boardsSnapshot.docs];
         
-        // Then check for boards where user is a member via subcollection
-        console.log(`Checking for boards where user ${user.uid} is a member for deadlines`);
+        console.log(`Found ${ownedBoardsSnapshot.docs.length} boards owned by user ${user.uid}`);
+        ownedBoardsSnapshot.docs.forEach(doc => {
+          boardIds.add(doc.id);
+          boardDocs.push(doc);
+        });
+        
+        // 2. Get boards where user is in memberIds array
+        console.log("Getting boards where user is in memberIds array...");
+        const memberBoardsSnapshot = await adminDb.collection("boards")
+          .where("memberIds", "array-contains", user.uid)
+          .get();
+        
+        console.log(`Found ${memberBoardsSnapshot.docs.length} boards with user ${user.uid} in memberIds`);
+        memberBoardsSnapshot.docs.forEach(doc => {
+          if (!boardIds.has(doc.id)) { // Avoid duplicates
+            boardIds.add(doc.id);
+            boardDocs.push(doc);
+          }
+        });
+        
+        // 3. Get boards where user is in members subcollection
+        console.log("Getting boards where user is in members subcollection...");
         const boardsCollection = adminDb.collection('boards');
-        
-        // Get all boards
         const allBoardsSnapshot = await boardsCollection.get();
+        console.log(`Checking through ${allBoardsSnapshot.docs.length} boards for user membership`);
         
-        // For each board, check if user is a member with ACCEPTED status
         for (const boardDoc of allBoardsSnapshot.docs) {
           const boardId = boardDoc.id;
-          // Skip boards we already have
-          if (boardDocs.some(doc => doc.id === boardId)) {
+          // Skip boards we already found
+          if (boardIds.has(boardId)) {
             continue;
           }
           
-          const membersCollection = boardsCollection.doc(boardId).collection('members');
-          const memberQuery = await membersCollection
-            .where('id', '==', user.uid)
-            .where('status', '==', 'ACCEPTED')
-            .limit(1)
-            .get();
-            
-          if (!memberQuery.empty) {
-            boardDocs.push(boardDoc);
+          const membersRef = boardDoc.ref.collection('members');
+          
+          // Try different approaches to find the user's membership
+          
+          // First check by userId
+          try {
+            const memberByUserIdQuery = await membersRef
+              .where('userId', '==', user.uid)
+              .where('status', '==', 'ACCEPTED')
+              .get();
+              
+            if (!memberByUserIdQuery.empty) {
+              boardIds.add(boardId);
+              boardDocs.push(boardDoc);
+              console.log(`Found board ${boardId} where user ${user.uid} is a member by userId`);
+              continue; // Skip other checks for this board
+            }
+          } catch (error) {
+            console.error(`Error checking membership by userId for board ${boardId}:`, error);
+          }
+          
+          // Then try by id field
+          try {
+            const memberByIdQuery = await membersRef
+              .where('id', '==', user.uid)
+              .where('status', '==', 'ACCEPTED')
+              .get();
+              
+            if (!memberByIdQuery.empty) {
+              boardIds.add(boardId);
+              boardDocs.push(boardDoc);
+              console.log(`Found board ${boardId} where user ${user.uid} is a member by id field`);
+              continue; // Skip other checks for this board
+            }
+          } catch (error) {
+            console.error(`Error checking membership by id for board ${boardId}:`, error);
+          }
+          
+          // Finally try by email if available
+          if (user.email) {
+            try {
+              const memberByEmailQuery = await membersRef
+                .where('email', '==', user.email)
+                .where('status', '==', 'ACCEPTED')
+                .get();
+                
+              if (!memberByEmailQuery.empty) {
+                boardIds.add(boardId);
+                boardDocs.push(boardDoc);
+                console.log(`Found board ${boardId} where user is a member by email ${user.email}`);
+              }
+            } catch (error) {
+              console.error(`Error checking membership by email for board ${boardId}:`, error);
+            }
           }
         }
         
@@ -935,13 +1003,45 @@ upcomingDeadlines: async (_, { days = 7 }, { user }) => {
             const columnData = columnDoc.data();
             const columnTitle = columnData.title || "Untitled Column";
             
-            // Get cards from the column's cards subcollection (correct path)
-            const cardsRef = columnDoc.ref.collection("cards");
-            const cardsSnapshot = await cardsRef.get();
+            // Get cards using both approaches we used in taskStats
+            console.log(`Fetching cards for deadlines in column: ${columnId} (${columnTitle}) in board: ${boardId}`);
             
-            console.log(`Checking ${cardsSnapshot.docs.length} cards in column "${columnTitle}" (ID: ${columnId})`);
+            let cards = [];
             
-            for (const cardDoc of cardsSnapshot.docs) {
+            // First try getting cards from the top-level cards collection
+            try {
+              const cardsCollection = adminDb.collection('cards')
+                .where('columnId', '==', columnId);
+              
+              const topLevelCardsSnapshot = await cardsCollection.get();
+              console.log(`Top-level cards collection returned ${topLevelCardsSnapshot.docs.length} cards for column ${columnId}`);
+              
+              if (topLevelCardsSnapshot.docs.length > 0) {
+                cards = topLevelCardsSnapshot.docs;
+              }
+            } catch (error) {
+              console.error(`Error fetching cards from top-level collection for column ${columnId}:`, error);
+            }
+            
+            // If we didn't find any cards in the top-level collection, try the subcollection
+            if (cards.length === 0) {
+              try {
+                const cardsRef = columnDoc.ref.collection("cards");
+                const subCollectionSnapshot = await cardsRef.get();
+                console.log(`Subcollection approach returned ${subCollectionSnapshot.docs.length} cards for column ${columnId}`);
+                
+                if (subCollectionSnapshot.docs.length > 0) {
+                  cards = subCollectionSnapshot.docs;
+                }
+              } catch (error) {
+                console.error(`Error fetching cards from subcollection for column ${columnId}:`, error);
+              }
+            }
+            
+            console.log(`Total cards found for column "${columnTitle}" (ID: ${columnId}): ${cards.length}`);
+            
+            // Process the cards we found
+            for (const cardDoc of cards) {
               const cardData = cardDoc.data();
               
               // Check if the card has a due date
@@ -1868,6 +1968,20 @@ upcomingDeadlines: async (_, { days = 7 }, { user }) => {
         }
         console.log('Successfully saved member to database:', verifyDoc.data());
 
+        // Log activity for member invitation
+        await logActivity({
+          type: "MEMBER_INVITED",
+          userId: user.uid,
+          boardId,
+          description: `Invited ${email} to board ${board.title}`,
+          boardTitle: board.title,
+          data: { 
+            email: email,
+            role: memberData.role,
+            boardTitle: board.title
+          },
+        });
+
         // Generate invitation link with the board ID and member ID
         const invitationLink = `${process.env.NEXT_PUBLIC_APP_URL}/api/invitations/accept?boardId=${boardId}&memberId=${memberRef.id}`;
 
@@ -2007,12 +2121,18 @@ upcomingDeadlines: async (_, { days = 7 }, { user }) => {
           }
         }
         
+        // Get board title for the activity log (using the boardDoc we already fetched)
+        const currentBoardData = boardDoc.data();
+        const boardTitle = currentBoardData?.title || 'Unknown Board';
+
         // Log the activity
         await logActivity({
           type: "MEMBER_REMOVED",
           userId: user.uid,
           boardId: boardId,
-          data: { memberId, boardId }
+          boardTitle: boardTitle,
+          description: `Removed a member from board ${boardTitle}`,
+          data: { memberId, boardId, boardTitle }
         });
         
         // Explicitly fetch the updated members list

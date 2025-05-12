@@ -135,6 +135,54 @@ export async function POST(request: NextRequest) {
       console.log('Successfully updated member document with ID:', memberId);
       console.log('Updated document data:', updatedMemberDoc.data());
       
+      // Get board details to fetch the board title and owner
+      const boardDoc = await adminDb.collection('boards').doc(boardId).get();
+      const boardData = boardDoc.data();
+      
+      if (boardData) {
+        // First notify the board owner
+        try {
+          // Import the notification creation function
+          const { createInvitationAcceptedNotification } = await import('@/utils/notifications');
+          
+          // Notify the board owner
+          await createInvitationAcceptedNotification(
+            boardData.userId, // Board owner's userId
+            user.displayName || '',
+            user.email || '',
+            boardData.title || 'Untitled Board',
+            boardId
+          );
+          console.log(`Sent invitation acceptance notification to board owner ${boardData.userId}`);
+          
+          // Also notify all admin members of the board
+          const adminMembersSnapshot = await adminDb.collection('boards')
+            .doc(boardId)
+            .collection('members')
+            .where('role', '==', 'ADMIN')
+            .where('status', '==', 'ACCEPTED')
+            .get();
+          
+          // Send notifications to all admin members (except the accepting user)
+          for (const adminDoc of adminMembersSnapshot.docs) {
+            const adminData = adminDoc.data();
+            if (adminData.userId && adminData.userId !== user.uid) {
+              await createInvitationAcceptedNotification(
+                adminData.userId,
+                user.displayName || '',
+                user.email || '',
+                boardData.title || 'Untitled Board',
+                boardId
+              );
+              console.log(`Sent invitation acceptance notification to admin ${adminData.userId}`);
+            }
+          }
+        } catch (notificationError) {
+          // Log the error but continue with the acceptance process
+          console.error('Error creating notification:', notificationError);
+        }
+      }
+      
       return NextResponse.json({ 
         success: true, 
         message: 'Invitation accepted successfully',

@@ -49,7 +49,7 @@ import { SEARCH_QUERY } from "@/graphql/search";
 import { GET_NOTIFICATIONS, MARK_NOTIFICATION_READ, MARK_ALL_NOTIFICATIONS_READ } from "@/graphql/notifications";
 
 export default function DashboardHeader() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const router = useRouter();
   const bgColor = useColorModeValue("white", "gray.800");
   const notificationBg = useColorModeValue("gray.50", "gray.700");
@@ -302,11 +302,13 @@ export default function DashboardHeader() {
               </Box>
               {loadingNotifications ? (
                 <Box p={4} textAlign="center">
-                  <Spinner size="sm" color="blue.500" />
+                  <Spinner size="sm" color="purple.500" />
+                  <Text fontSize="sm" mt={2}>Loading notifications...</Text>
                 </Box>
               ) : notifications.length === 0 ? (
-                <Box p={4} textAlign="center">
-                  <Text>No notifications</Text>
+                <Box p={4} textAlign="center" py={6}>
+                  <Box as={FiBell} fontSize="xl" mb={2} mx="auto" color="gray.400" />
+                  <Text>No new notifications</Text>
                 </Box>
               ) : (
                 notifications.map(notification => (
@@ -356,6 +358,20 @@ export default function DashboardHeader() {
               <MenuItem onClick={() => router.push('/settings?tab=profile')}>Profile</MenuItem>
               <MenuItem onClick={() => router.push('/settings?tab=appearance')}>Appearance</MenuItem>
               <MenuItem onClick={() => router.push("/settings")}>Settings</MenuItem>
+              <Divider my={2} />
+              <MenuItem 
+                onClick={async () => {
+                  try {
+                    await signOut();
+                    router.push('/login');
+                  } catch (error) {
+                    console.error('Error signing out:', error);
+                  }
+                }}
+                color="red.500"
+              >
+                Sign Out
+              </MenuItem>
             </MenuList>
           </Menu>
         </HStack>
