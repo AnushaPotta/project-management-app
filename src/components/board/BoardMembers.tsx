@@ -54,6 +54,29 @@ export function BoardMembers({
   // Debug members array
   console.log("Members in BoardMembers component:", members);
 
+  // Function to get the best display name for a member
+  const getDisplayName = (member: any) => {
+    // If we have a proper name that's not just 'Admin', use it
+    if (member.name && member.name !== 'Admin') {
+      return member.name;
+    }
+    
+    // If we have an email, use it or extract the username part from it
+    if (member.email) {
+      // Extract username from email (part before @)
+      const emailUsername = member.email.split('@')[0];
+      return emailUsername;
+    }
+    
+    // If we have an ID, use a truncated version of it
+    if (member.id) {
+      return `User ${member.id.substring(0, 6)}`;
+    }
+    
+    // Last resort
+    return 'Unknown User';
+  };
+
   const handleInvite = () => {
     if (email) {
       onInviteMember(email);
@@ -96,12 +119,15 @@ export function BoardMembers({
                     <HStack>
                       <Avatar
                         size="sm"
-                        name={member.name}
+                        name={member.name !== 'Admin' ? member.name : member.email}
                         src={member.avatar}
                       />
                       <Box>
                         <HStack spacing={2}>
-                          <Text fontWeight="bold">{member.name || member.email}</Text>
+                          {/* Always use the best available name or identifier */}
+                          <Text fontWeight="bold">
+                            {getDisplayName(member)}
+                          </Text>
                           {member.role === 'ADMIN' && (
                             <Text fontSize="xs" color="purple.500" fontWeight="bold">
                               ADMIN

@@ -58,13 +58,43 @@ export default function Column({
   const [deleteColumnMutation] = useMutation(DELETE_COLUMN_MUTATION);
 
   const findCardByProperties = (boardData, title, columnId) => {
-    if (!boardData || !boardData.columns) return null;
+    if (!boardData || !boardData.columns) {
+      console.log("Cannot find card: boardData or columns missing", { boardData });
+      return null;
+    }
+    
+    console.log("Searching for card in server response", { title, columnId, boardData });
     
     for (const column of boardData.columns) {
       if (column.id === columnId && column.cards) {
-        return column.cards.find((card) => card && card.title === title);
+        // First try finding by exact title match
+        const found = column.cards.find((card) => card && card.title === title);
+        if (found) {
+          console.log("Found matching card in server response", found);
+          return found;
+        }
       }
     }
+    
+    // If not found by exact match, get the latest card in the specified column
+    for (const column of boardData.columns) {
+      if (column.id === columnId && column.cards && column.cards.length > 0) {
+        // Sort by createdAt if available and get the latest
+        const latestCard = [...column.cards].sort((a, b) => {
+          if (!a || !b) return 0;
+          const aDate = a.createdAt ? new Date(a.createdAt) : new Date(0);
+          const bDate = b.createdAt ? new Date(b.createdAt) : new Date(0);
+          return bDate.getTime() - aDate.getTime(); // Latest first
+        })[0];
+        
+        if (latestCard) {
+          console.log("Falling back to latest card in column", latestCard);
+          return latestCard;
+        }
+      }
+    }
+    
+    console.log("No matching card found in server response");
     return null;
   };
 
@@ -176,6 +206,13 @@ export default function Column({
       }
 
       // STEP 5: Make the API call
+      console.log(`Adding new card "${newCardTitle}" to column "${column.title}" (ID: ${column.id})`);
+      console.log(`Current column structure:`, {
+        id: column.id,
+        title: column.title, 
+        cardCount: column.cards?.length || 0
+      });
+      
       const { data } = await addCardMutation({
         variables: {
           columnId: column.id,
@@ -186,6 +223,8 @@ export default function Column({
       });
 
       // STEP 6: Merge the server response while preserving column order
+      console.log("Server response from card addition:", data);
+      
       if (data?.addCard) {
         // Find the real card from the response that matches our temporary card
         const serverCard = findCardByProperties(
@@ -209,9 +248,15 @@ export default function Column({
             if (cardIndex !== -1) {
               // Replace our optimistic card with the real one from server
               finalBoard.columns[colIndex].cards[cardIndex] = serverCard;
+              console.log("Successfully updated optimistic card with server data", serverCard);
               onBoardChange(finalBoard);
             }
           }
+        } else {
+          // If we couldn't find the new card in the response, refresh the entire board
+          console.log("Couldn't find the new card in server response - refreshing entire board");
+          // Use the server-returned board data to ensure database consistency
+          onBoardChange(data.addCard);
         }
       }
 
@@ -226,9 +271,22 @@ export default function Column({
       });
     } catch (error) {
       console.error("Failed to add card:", error);
+      
+      // Check for specific errors that might indicate permission issues
+      let errorMessage = "Failed to add card";
+      if (error.message && error.message.includes("Not authorized")) {
+        errorMessage = "You don't have permission to add cards to this board";
+      } else if (error.message && error.message.includes("Column not found")) {
+        errorMessage = "The column you're trying to add to no longer exists";
+      }
+      
+      // Remove the optimistic update since the server call failed
+      const revertedBoard = { ...board };
+      onBoardChange(revertedBoard);
+      
       toast({
         title: "Error",
-        description: "Failed to add card",
+        description: errorMessage,
         status: "error",
         duration: 3000,
         isClosable: true,

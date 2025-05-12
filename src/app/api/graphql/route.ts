@@ -1,12 +1,23 @@
 import { ApolloServer } from "@apollo/server";
 import { startServerAndCreateNextHandler } from "@as-integrations/next";
 import { typeDefs } from "@/graphql/schema";
-import { resolvers } from "@/graphql/resolvers";
+import { resolvers as mainResolvers } from "@/graphql/resolvers";
+import { resolvers as extendedResolvers } from "@/graphql/resolvers/index";
 import { getAuth } from 'firebase-admin/auth';
 import { db } from '@/lib/firebase';
 import { NextRequest } from 'next/server';
 import admin from 'firebase-admin';
 import { logActivity } from '@/utils/activity';
+import { AdminDb } from '@/utils/firestoreAdmin';
+import { createCardComment } from '@/utils/comments';
+import { 
+  createTaskAssignmentNotification, 
+  createTaskUnassignmentNotification,
+  createDueDateChangedNotification
+} from '@/utils/notifications';
+import { notificationsResolver, markNotificationReadResolver, markAllNotificationsReadResolver } from '@/graphql/resolvers/notifications';
+import { createTestNotificationResolver } from '@/graphql/resolvers/createTestNotifications';
+import { moveCardResolver } from '@/graphql/resolvers/moveCard';
 
 // Define interfaces for the updateCard resolver
 interface UpdateCardInput {
@@ -120,8 +131,21 @@ const customResolvers = {
         // Only add fields that are explicitly provided in the input
         if (input.title !== undefined) updateData.title = input.title;
         if (input.description !== undefined) updateData.description = input.description;
-        if (input.dueDate !== undefined) updateData.dueDate = input.dueDate;
-        if (input.assignedTo !== undefined) updateData.assignedTo = input.assignedTo;
+        
+        // Track changes for notifications
+        const existingCardDoc = await cardRef.get();
+        const existingCardData = existingCardDoc.data() as CardData;
+        const previousAssignee = existingCardData?.assignedTo || null;
+        const previousDueDate = existingCardData?.dueDate || null;
+        
+        // Handle due date changes
+        if (input.dueDate !== undefined) {
+          updateData.dueDate = input.dueDate;
+        }
+        
+        if (input.assignedTo !== undefined) {
+          updateData.assignedTo = input.assignedTo;
+        }
         if (input.labels !== undefined) updateData.labels = input.labels;
 
         // Update the card in Firestore
@@ -130,6 +154,98 @@ const customResolvers = {
         // Get the updated card document
         const updatedCardDoc = await cardRef.get();
         const updatedCardData = updatedCardDoc.data() as CardData;
+        
+        // Helper function to get notification context
+        const getNotificationContext = async () => {
+          // Get board title for notification
+          const boardDoc = await adminDb.collection('boards').doc(boardId).get();
+          const boardData = boardDoc.exists ? boardDoc.data() : { title: 'Unknown Board' };
+          const boardTitle = boardData.title || 'Unknown Board';
+          
+          // Get current user's name for notification
+          let userName = user.displayName || 'A user';
+          if (user.email) userName = user.email.split('@')[0];
+          
+          return { boardTitle, userName };
+        };
+        
+        // Create notifications for any changes
+        try {
+          // Get context information once to avoid duplicate calls
+          const { boardTitle, userName } = await getNotificationContext();
+          
+          // Create assignment notifications if assignment changed
+          if (input.assignedTo !== undefined && input.assignedTo !== previousAssignee) {
+            // If previously assigned, notify that user they've been unassigned
+            if (previousAssignee && previousAssignee.length > 0) {
+              console.log(`Creating unassignment notification for previous assignee: ${previousAssignee}`);
+              await createTaskUnassignmentNotification(
+                previousAssignee,
+                updatedCardData.title || 'Untitled Card',
+                boardTitle,
+                cardId,
+                userName
+              );
+            }
+            
+            // If newly assigned, notify that user they've been assigned
+            if (input.assignedTo && input.assignedTo.length > 0 && input.assignedTo !== user.uid) {
+              console.log(`Creating assignment notification for new assignee: ${input.assignedTo}`);
+              await createTaskAssignmentNotification(
+                input.assignedTo,
+                updatedCardData.title || 'Untitled Card',
+                boardTitle,
+                cardId,
+                userName
+              );
+            }
+          }
+          
+          // Create due date change notifications
+          if (input.dueDate !== undefined && input.dueDate !== previousDueDate) {
+            console.log(`Due date changed from ${previousDueDate} to ${input.dueDate}`);
+            
+            // Determine who to notify about the due date change
+            let notificationRecipients = [] as string[];
+            
+            // Always notify the assignee about due date changes if they exist
+            if (updatedCardData.assignedTo && updatedCardData.assignedTo !== user.uid) {
+              notificationRecipients.push(updatedCardData.assignedTo);
+            }
+            
+            // Notify board admins about due date changes
+            const membersRef = adminDb.collection('boards').doc(boardId).collection('members');
+            const adminsSnapshot = await membersRef.where('role', '==', 'ADMIN').get();
+            
+            for (const adminDoc of adminsSnapshot.docs) {
+              const adminData = adminDoc.data();
+              if (adminData.userId && 
+                  adminData.userId !== user.uid && 
+                  !notificationRecipients.includes(adminData.userId)) {
+                notificationRecipients.push(adminData.userId);
+              }
+            }
+            
+            // Create notifications for each recipient
+            if (input.dueDate) {
+              const dueDate = new Date(input.dueDate);
+              for (const recipientId of notificationRecipients) {
+                console.log(`Creating due date changed notification for: ${recipientId}`);
+                await createDueDateChangedNotification(
+                  recipientId,
+                  updatedCardData.title || 'Untitled Card',
+                  boardTitle,
+                  cardId,
+                  dueDate,
+                  userName
+                );
+              }
+            }
+          }
+        } catch (notificationError) {
+          // Log but don't fail the operation
+          console.error('Error creating notifications:', notificationError);
+        }
         
         // Log activity
         try {
@@ -163,12 +279,21 @@ const customResolvers = {
   }
 };
 
-// Merge the custom resolvers with the imported resolvers
+// Merge all resolvers together
 const mergedResolvers = {
-  ...resolvers,
+  ...extendedResolvers,  // This includes the userProfile resolver
+  Query: {
+    ...(mainResolvers.Query || {}),
+    ...(extendedResolvers.Query || {}),
+    notifications: notificationsResolver
+  },
   Mutation: {
-    ...(resolvers.Mutation || {}),
-    ...customResolvers.Mutation
+    ...(mainResolvers.Mutation || {}),
+    ...customResolvers.Mutation,
+    markNotificationRead: markNotificationReadResolver,
+    markAllNotificationsRead: markAllNotificationsReadResolver,
+    createTestNotifications: createTestNotificationResolver,
+    moveCard: moveCardResolver
   }
 };
 

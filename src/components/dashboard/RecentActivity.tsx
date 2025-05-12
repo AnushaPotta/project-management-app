@@ -21,7 +21,9 @@ export default function RecentActivity() {
   const router = useRouter();
   const { data, loading, error } = useQuery(GET_RECENT_ACTIVITY, {
     variables: { limit: 10 },
-    pollInterval: 60000, // Optional: refresh every minute
+    fetchPolicy: 'cache-and-network',
+    nextFetchPolicy: 'cache-first',
+    pollInterval: 300000, // Reduce polling frequency: refresh every 5 minutes instead of every minute
   });
 
   const handleActivityClick = (activity) => {

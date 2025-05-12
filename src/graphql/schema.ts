@@ -130,6 +130,17 @@ type DeadlineCard {
   columnTitle: String!
 }
 
+type Notification {
+  id: ID!
+  title: String!
+  description: String!
+  time: String!
+  read: Boolean!
+  type: String!
+  targetId: String
+  userId: String!
+}
+
 type SearchResult {
   id: ID!
   type: String!  # "board" or "task"
@@ -147,6 +158,8 @@ extend type Query {
   recentActivity(limit: Int, offset: Int): [ActivityItem!]!
   upcomingDeadlines(days: Int): [DeadlineCard!]!
   search(query: String!): [SearchResult!]!
+  userProfile: User
+  notifications: [Notification!]!
 }
 
 
@@ -155,6 +168,9 @@ extend type Query {
     createBoard(title: String!, description: String): Board
     updateBoard(id: ID!, input: BoardUpdateInput!): Board
     deleteBoard(id: ID!): Boolean
+    markNotificationRead(id: ID!): Boolean
+    markAllNotificationsRead: Boolean
+    createTestNotifications(userId: ID!): Boolean
 
     inviteMember(boardId: ID!, email: String!): Board
     removeMember(boardId: ID!, memberId: ID!): Board

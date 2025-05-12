@@ -41,6 +41,8 @@ import {
 } from "react-icons/fi";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
+import { useQuery } from "@apollo/client";
+import { GET_USER_PROFILE } from "@/graphql/user";
 
 interface User {
   uid: string;
@@ -62,6 +64,28 @@ export default function SettingsView({ user }: SettingsViewProps) {
   const { colorMode, toggleColorMode } = useColorMode();
   const { updateProfile } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Fetch enhanced user profile data from GraphQL
+  const { loading: profileLoading, data: profileData } = useQuery(GET_USER_PROFILE, {
+    fetchPolicy: 'network-only', // Don't use cache for profile data
+    onCompleted: (data) => {
+      if (data?.userProfile) {
+        console.log('Received user profile data:', data.userProfile);
+        setProfileForm({
+          name: data.userProfile.name || user?.displayName || user?.name || "",
+          email: data.userProfile.email || user?.email || "",
+        });
+      }
+    },
+    onError: (error) => {
+      console.error('Error fetching user profile:', error);
+      // Fall back to auth user data if GraphQL fails
+      setProfileForm({
+        name: user?.displayName || user?.name || "",
+        email: user?.email || "",
+      });
+    }
+  });
+  
   const [profileForm, setProfileForm] = useState({
     name: user?.displayName || user?.name || "",
     email: user?.email || "",

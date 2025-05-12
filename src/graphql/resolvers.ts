@@ -100,13 +100,89 @@ export const resolvers = {
         
         console.log(`Found ${membersSnapshot.docs.length} members in subcollection`);
         
-        let membersList = membersSnapshot.docs.map(memberDoc => {
+        // Process each member, with special handling for admins with poor data
+        let membersList = [];
+        
+        // First map all members
+        for (const memberDoc of membersSnapshot.docs) {
           console.log(`Member from DB: ID=${memberDoc.id}, data=`, memberDoc.data());
-          return {
-            id: memberDoc.id,
-            ...memberDoc.data(),
-          };
-        });
+          const memberData = memberDoc.data();
+          const memberId = memberDoc.id;
+          
+          // Check if this is an admin with poor data (name is 'Admin' or missing)
+          if (memberData.role === 'ADMIN' && (!memberData.name || memberData.name === 'Admin' || memberData.name === '')) {
+            console.log(`Found admin with poor data: ${memberId}, trying to enhance data`);
+            
+            // Get better user data using the same approach as for new admin members
+            let improvedName = '';
+            let improvedEmail = memberData.email || '';
+            
+            try {
+              // Try to get Firebase Auth data
+              const authUser = await admin.auth().getUser(memberId).catch(e => null);
+              if (authUser) {
+                console.log(`Got Firebase Auth data for admin ${memberId}:`, authUser);
+                improvedName = authUser.displayName || '';
+                improvedEmail = authUser.email || improvedEmail;
+              }
+              
+              // Also check Firestore user document
+              const userDoc = await adminDb.collection('users').doc(memberId).get();
+              if (userDoc.exists) {
+                const userData = userDoc.data();
+                console.log(`Found Firestore user data for admin:`, userData);
+                if (!improvedName) {
+                  improvedName = userData.name || userData.displayName || '';
+                }
+                if (!improvedEmail) {
+                  improvedEmail = userData.email || '';
+                }
+              }
+              
+              // Try to derive name from email
+              if (!improvedName && improvedEmail) {
+                improvedName = improvedEmail.split('@')[0];
+              }
+              
+              // Last resort
+              if (!improvedName) {
+                improvedName = `User ${memberId.substring(0, 6)}`;
+              }
+              
+              // Update the member data with better information
+              const enhancedMember = {
+                id: memberId,
+                ...memberData,
+                name: improvedName,
+                email: improvedEmail
+              };
+              
+              // Also update the database if we have better data
+              if (improvedName !== 'Admin' && improvedName !== '') {
+                console.log(`Updating admin record with better data: ${improvedName}`);
+                await memberDoc.ref.update({
+                  name: improvedName,
+                  email: improvedEmail
+                });
+              }
+              
+              membersList.push(enhancedMember);
+            } catch (error) {
+              console.error(`Error enhancing admin member data:`, error);
+              // If enhancement fails, add the original data
+              membersList.push({
+                id: memberId,
+                ...memberData
+              });
+            }
+          } else {
+            // For non-admin members or admins with good data, just add them as is
+            membersList.push({
+              id: memberId,
+              ...memberData
+            });
+          }
+        }
         
         // Check if the creator is already in the members list
         const creatorExists = membersList.some(member => member.id === creatorId);
@@ -116,22 +192,58 @@ export const resolvers = {
         if (!creatorExists && creatorId) {
           console.log(`Adding creator ${creatorId} as admin`);
           
-          // Get creator's user info
-          const userDoc = await adminDb.collection('users').doc(creatorId).get();
-          let userData = null;
+          // Get creator's user info with multiple sources
+          console.log(`Fetching detailed creator data for ${creatorId}`);
           
-          if (userDoc.exists) {
-            userData = userDoc.data();
-            console.log(`Found creator user data:`, userData);
-          } else {
-            console.log(`Creator user data not found`);
+          // Try to get more detailed creator info from Firebase Auth
+          let userData = null;
+          let userName = '';
+          let userEmail = '';
+          
+          try {
+            // Get Firebase Auth user data directly
+            const authUser = await admin.auth().getUser(creatorId);
+            console.log(`Got Firebase Auth user:`, authUser);
+            
+            // Set basic info from auth
+            userName = authUser.displayName || '';
+            userEmail = authUser.email || '';
+          } catch (authError) {
+            console.log(`Could not get Firebase Auth data:`, authError);
           }
           
-          // Create admin member record for creator
+          // Also try Firestore user document as a backup
+          const userDoc = await adminDb.collection('users').doc(creatorId).get();
+          if (userDoc.exists) {
+            userData = userDoc.data();
+            console.log(`Found creator user data in Firestore:`, userData);
+            
+            // Only use Firestore data if it's better than what we have
+            if (!userName && (userData?.name || userData?.displayName)) {
+              userName = userData.name || userData.displayName;
+            }
+            if (!userEmail && userData?.email) {
+              userEmail = userData.email;
+            }
+          } else {
+            console.log(`Creator user data not found in Firestore`);
+          }
+          
+          // If we still don't have a name but have an email, extract username from email
+          if (!userName && userEmail) {
+            userName = userEmail.split('@')[0];
+          }
+          
+          // Last resort: use a truncated user ID
+          if (!userName) {
+            userName = `User ${creatorId.substring(0, 6)}`;
+          }
+          
+          // Create admin member record for creator with enhanced user info
           const creatorMember = {
             id: creatorId,
-            name: userData?.name || userData?.displayName || 'Admin',
-            email: userData?.email || '',
+            name: userName,  // Use our enhanced user name from multiple sources
+            email: userEmail, // Use enhanced email
             role: 'ADMIN',
             status: 'ACCEPTED',
             joinedAt: firestore.FieldValue.serverTimestamp()
@@ -521,99 +633,214 @@ export const resolvers = {
       try {
         console.log(`\n=== TaskStats for user: ${user.uid} ===`);
         
-        // Get all boards for the user
-        const boardsRef = adminDb.collection("boards");
-        const boardsSnapshot = await boardsRef
+        // We need to directly check for both owned boards AND boards where user is a member/admin
+        // Since the original boards resolver might be missing something
+        
+        // Create a set to track unique board IDs
+        const boardIds = new Set();
+        const boardsData = [];
+        
+        // 1. Get boards where user is the direct owner
+        console.log("Getting boards where user is the owner...");
+        const ownedBoardsSnapshot = await adminDb.collection("boards")
+          .where("userId", "==", user.uid)
+          .get();
+        
+        console.log(`Found ${ownedBoardsSnapshot.docs.length} boards owned by user ${user.uid}`);
+        
+        ownedBoardsSnapshot.docs.forEach(doc => {
+          boardIds.add(doc.id);
+          boardsData.push({
+            id: doc.id,
+            ...doc.data(),
+            accessType: 'owner' // For debugging
+          });
+        });
+        
+        // 2. Get boards where user is in memberIds array
+        console.log("Getting boards where user is in memberIds array...");
+        const memberBoardsSnapshot = await adminDb.collection("boards")
           .where("memberIds", "array-contains", user.uid)
           .get();
+        
+        console.log(`Found ${memberBoardsSnapshot.docs.length} boards with user ${user.uid} in memberIds`);
+        
+        memberBoardsSnapshot.docs.forEach(doc => {
+          if (!boardIds.has(doc.id)) { // Avoid duplicates
+            boardIds.add(doc.id);
+            boardsData.push({
+              id: doc.id,
+              ...doc.data(),
+              accessType: 'memberIds' // For debugging
+            });
+          }
+        });
+        
+        // 3. Get boards where user is in members subcollection
+        console.log("Getting boards where user is in members subcollection...");
+        
+        // Check all boards - this is potentially expensive but necessary to check the subcollections
+        const allBoardsSnapshot = await adminDb.collection('boards').get();
+        console.log(`Checking through ${allBoardsSnapshot.docs.length} boards for user membership`);
+        
+        // Log all boards for debugging
+        console.log('=== ALL AVAILABLE BOARDS ===');
+        allBoardsSnapshot.docs.forEach(doc => {
+          const boardData = doc.data();
+          console.log(`Board ID: ${doc.id}, Title: ${boardData.title || 'Untitled'}, Owner: ${boardData.userId || 'Unknown'}, MemberIds: ${JSON.stringify(boardData.memberIds || [])}`);
+        });
+        
+        for (const boardDoc of allBoardsSnapshot.docs) {
+          // Skip boards we already found
+          if (boardIds.has(boardDoc.id)) {
+            continue;
+          }
           
-        console.log(`Found ${boardsSnapshot.docs.length} boards for user`);
-
+          const membersRef = boardDoc.ref.collection('members');
+          
+          // Check by userId first
+          const memberByUserIdQuery = await membersRef
+            .where('userId', '==', user.uid)
+            .where('status', '==', 'ACCEPTED')
+            .get();
+            
+          if (!memberByUserIdQuery.empty) {
+            boardIds.add(boardDoc.id);
+            boardsData.push({
+              id: boardDoc.id,
+              ...boardDoc.data(),
+              accessType: 'subcollection-userId', // For debugging
+              role: memberByUserIdQuery.docs[0].data().role || 'MEMBER' // Include role info
+            });
+            continue; // Skip the email check for this board
+          }
+          
+          // If no match by userId, try by email
+          if (user.email) {
+            const memberByEmailQuery = await membersRef
+              .where('email', '==', user.email)
+              .where('status', '==', 'ACCEPTED')
+              .get();
+              
+            if (!memberByEmailQuery.empty) {
+              boardIds.add(boardDoc.id);
+              boardsData.push({
+                id: boardDoc.id,
+                ...boardDoc.data(),
+                accessType: 'subcollection-email', // For debugging
+                role: memberByEmailQuery.docs[0].data().role || 'MEMBER' // Include role info
+              });
+            }
+          }
+        }
+        
+        // Log all found boards with their access type for debugging
+        console.log("=== BOARDS SUMMARY ===");
+        boardsData.forEach(board => {
+          console.log(`Board: ${board.title} (${board.id}), Access: ${board.accessType}, Role: ${board.role || 'N/A'}`);
+        });
+        
+        console.log(`Found ${boardIds.size} total unique boards for user ${user.uid}`);
+        
+        if (boardIds.size === 0) {
+          console.log('\n=== Task Summary ===');
+          console.log('Total tasks: 0');
+          console.log('TODO: 0');
+          console.log('IN PROGRESS: 0');
+          console.log('COMPLETED: 0');
+          console.log('===================\n');
+          
+          return {
+            total: 0,
+            todo: 0,
+            inProgress: 0,
+            completed: 0
+          };
+        }
+        
+        // Calculate task statistics across all user's boards
         let totalTasks = 0;
         let todoTasks = 0;
         let inProgressTasks = 0;
         let completedTasks = 0;
-
-        // Loop through each board using the board resolver to ensure consistent column access
-        for (const boardDoc of boardsSnapshot.docs) {
-          const boardId = boardDoc.id;
-          const boardData = boardDoc.data();
-          console.log(`\nProcessing board: ${boardData.title || boardId} (ID: ${boardId})`);
+        
+        // Process all the boards to get task statistics
+        for (const boardId of boardIds) {
+          console.log(`Processing board: ${boardId}`);
           
-          // Get board data using the same resolver used by the frontend
-          // This ensures we access columns the same way as the UI
-          const board = await resolvers.Query.board(null, { id: boardId }, { user });
-          const columns = board.columns || [];
-          
-          console.log(`- Board has ${columns.length} columns`);
-          
-          // Process each column's cards
-          for (const column of columns) {
-            const columnTitle = column.title.toLowerCase();
-            const cards = column.cards || [];
-            const cardsCount = cards.length;
+          // Get columns in this board
+          const columnsSnapshot = await adminDb.collection('columns')
+            .where('boardId', '==', boardId)
+            .get();
             
+          console.log(`Found ${columnsSnapshot.docs.length} columns in board ${boardId}`);
+            
+          // Process each column
+          for (const columnDoc of columnsSnapshot.docs) {
+            const columnId = columnDoc.id;
+            const column = columnDoc.data();
+            
+            // Get cards in this column
+            console.log(`Fetching cards for column: ${columnId} in board: ${boardId}`);
+            
+            let cards = [];
+            try {
+              // First try getting cards from the top-level cards collection
+              const cardsCollection = adminDb.collection('cards')
+                .where('columnId', '==', columnId);
+              
+              const cardsSnapshot = await cardsCollection.get();
+              console.log(`Raw card count from Firestore for column ${columnId}: ${cardsSnapshot.docs.length}`);
+              
+              if (cardsSnapshot.docs.length > 0) {
+                cards = cardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+              } else {
+                // As a fallback, try getting the column directly and then accessing its cards subcollection
+                const columnRef = adminDb.collection('columns').doc(columnId);
+                const cardsRef = columnRef.collection('cards');
+                const altCardsSnapshot = await cardsRef.get();
+                
+                console.log(`Alternate approach card count for column ${columnId}: ${altCardsSnapshot.docs.length}`);
+                
+                if (altCardsSnapshot.docs.length > 0) {
+                  cards = altCardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                }
+              }
+            } catch (error) {
+              console.error(`Error fetching cards for column ${columnId}:`, error);
+              // Continue with empty cards array
+            }
+            
+            // Debug card details
+            console.log(`Processing column: "${column.title}" (ID: ${columnId})`);
+            console.log(`- Cards in this column: ${cards.length}`);
+            
+            const cardsCount = cards.length;
             totalTasks += cardsCount;
             
-            // Debug column titles
-            console.log(`Column title: ${columnTitle}, cards: ${cardsCount}`);
-
-            // Categorize tasks based on column title (with expanded patterns)
-            // TODO column patterns
-            if (
-              columnTitle.includes("todo") || 
-              columnTitle.includes("to do") || 
-              columnTitle.includes("to-do") || 
-              columnTitle.includes("plan") || 
-              columnTitle.includes("backlog") || 
-              columnTitle.includes("new") || 
-              columnTitle.includes("queue") || 
-              columnTitle.includes("pending") || 
-              columnTitle.includes("upcoming") ||
-              columnTitle === "to"
-            ) {
+            // Categorize tasks based on column title (case insensitive)
+            const columnTitle = (column.title || '').toLowerCase();
+            
+            if (columnTitle.includes('todo') || columnTitle.includes('to do') || columnTitle.includes('backlog')) {
               todoTasks += cardsCount;
               console.log(`  → Counted as TODO: ${cardsCount} cards`);
-            } 
-            // DONE column patterns
-            else if (
-              columnTitle.includes("done") || 
-              columnTitle.includes("complete") || 
-              columnTitle.includes("finished") || 
-              columnTitle.includes("archived") || 
-              columnTitle.includes("closed") ||
-              columnTitle === "completed"
-            ) {
+            } else if (columnTitle.includes('done') || columnTitle.includes('complete') || columnTitle.includes('finished')) {
               completedTasks += cardsCount;
               console.log(`  → Counted as COMPLETED: ${cardsCount} cards`);
-            } 
-            // IN PROGRESS patterns (anything else)
-            else {
+            } else {
               inProgressTasks += cardsCount;
               console.log(`  → Counted as IN PROGRESS: ${cardsCount} cards`);
             }
           }
         }
-
-        // Summary of task counts
-        console.log(`\n=== Task Summary ===`);
+        
+        console.log('\n=== Task Summary ===');
         console.log(`Total tasks: ${totalTasks}`);
         console.log(`TODO: ${todoTasks}`);
         console.log(`IN PROGRESS: ${inProgressTasks}`);
         console.log(`COMPLETED: ${completedTasks}`);
-        console.log(`===================\n`);
+        console.log('===================\n');
         
-        // If no tasks found, return fallback demo data
-        if (totalTasks === 0) {
-          console.log("No tasks found, returning fallback demo data");
-          return {
-            total: 8,
-            todo: 3,
-            inProgress: 4,
-            completed: 1
-          };
-        }
-
         return {
           total: totalTasks,
           todo: todoTasks,
@@ -621,24 +848,23 @@ export const resolvers = {
           completed: completedTasks
         };
       } catch (error) {
-        console.error("Error calculating task stats:", error);
-        // Return fallback data even on error
+        console.error("Error getting task statistics:", error);
         return {
-          total: 8,
-          todo: 3,
-          inProgress: 4,
-          completed: 1
+          total: 0,
+          todo: 0,
+          inProgress: 0,
+          completed: 0
         };
       }
     },
-    
-    // Get upcoming deadlines
-    upcomingDeadlines: async (_, { days = 7 }, { user }) => {
-      if (!user) {
-        throw new Error("Not authenticated");
-      }
 
-      try {
+// Get upcoming deadlines
+upcomingDeadlines: async (_, { days = 7 }, { user }) => {
+  if (!user) {
+    throw new Error("Not authenticated");
+  }
+
+  try {
         // Calculate date range for upcoming deadlines
         const today = new Date();
         today.setHours(0, 0, 0, 0); // Start of today
@@ -649,29 +875,71 @@ export const resolvers = {
         const todayTimestamp = today.toISOString();
         const futureDateTimestamp = futureDate.toISOString();
         
-        // Get all boards for the user
+        // Get all boards for the user - similar to the taskStats resolver
+        // First get boards the user created
         const boardsRef = adminDb.collection("boards");
-        const boardsSnapshot = await boardsRef
-          .where("memberIds", "array-contains", user.uid)
+        let boardsSnapshot = await boardsRef
+          .where("userId", "==", user.uid)
           .get();
+          
+        let boardDocs = [...boardsSnapshot.docs];
+        
+        // Then check for boards where user is a member via subcollection
+        console.log(`Checking for boards where user ${user.uid} is a member for deadlines`);
+        const boardsCollection = adminDb.collection('boards');
+        
+        // Get all boards
+        const allBoardsSnapshot = await boardsCollection.get();
+        
+        // For each board, check if user is a member with ACCEPTED status
+        for (const boardDoc of allBoardsSnapshot.docs) {
+          const boardId = boardDoc.id;
+          // Skip boards we already have
+          if (boardDocs.some(doc => doc.id === boardId)) {
+            continue;
+          }
+          
+          const membersCollection = boardsCollection.doc(boardId).collection('members');
+          const memberQuery = await membersCollection
+            .where('id', '==', user.uid)
+            .where('status', '==', 'ACCEPTED')
+            .limit(1)
+            .get();
+            
+          if (!memberQuery.empty) {
+            boardDocs.push(boardDoc);
+          }
+        }
+        
+        console.log(`Found ${boardDocs.length} boards to search for deadlines`);
         
         let deadlineCards = [];
         
         // Loop through each board
-        for (const boardDoc of boardsSnapshot.docs) {
+        for (const boardDoc of boardDocs) {
           const boardId = boardDoc.id;
           const boardTitle = boardDoc.data().title || "Untitled Board";
-          const columnsRef = adminDb.collection("boards").doc(boardId).collection("columns");
-          const columnsSnapshot = await columnsRef.get();
+          
+          // IMPORTANT: Get columns from top-level columns collection (same as we fixed in taskStats)
+          console.log(`Searching for deadlines in board: ${boardTitle} (ID: ${boardId})`);
+          const columnsCollection = adminDb.collection('columns');
+          const columnsQuery = await columnsCollection
+            .where('boardId', '==', boardId)
+            .get();
+          
+          console.log(`Found ${columnsQuery.docs.length} columns for board ${boardId}`);
           
           // Loop through each column
-          for (const columnDoc of columnsSnapshot.docs) {
+          for (const columnDoc of columnsQuery.docs) {
             const columnId = columnDoc.id;
-            const columnTitle = columnDoc.data().title || "Untitled Column";
+            const columnData = columnDoc.data();
+            const columnTitle = columnData.title || "Untitled Column";
             
-            // Get cards in this column with due dates in the upcoming days
-            const cardsRef = columnsRef.doc(columnId).collection("cards");
+            // Get cards from the column's cards subcollection (correct path)
+            const cardsRef = columnDoc.ref.collection("cards");
             const cardsSnapshot = await cardsRef.get();
+            
+            console.log(`Checking ${cardsSnapshot.docs.length} cards in column "${columnTitle}" (ID: ${columnId})`);
             
             for (const cardDoc of cardsSnapshot.docs) {
               const cardData = cardDoc.data();
@@ -679,13 +947,30 @@ export const resolvers = {
               // Check if the card has a due date
               if (cardData.dueDate) {
                 const dueDate = cardData.dueDate;
+                let dueDateTimestamp;
+                
+                // Handle different possible date formats
+                if (typeof dueDate === 'object' && dueDate._seconds) {
+                  // Firestore Timestamp object
+                  dueDateTimestamp = new Date(dueDate._seconds * 1000).toISOString();
+                } else if (typeof dueDate === 'string') {
+                  // ISO string
+                  dueDateTimestamp = dueDate;
+                } else if (dueDate instanceof Date) {
+                  // Date object
+                  dueDateTimestamp = dueDate.toISOString();
+                } else {
+                  console.log(`Skipping card with invalid dueDate format: ${typeof dueDate}`, dueDate);
+                  continue;
+                }
                 
                 // Check if due date is within our range
-                if (dueDate >= todayTimestamp && dueDate <= futureDateTimestamp) {
+                if (dueDateTimestamp >= todayTimestamp && dueDateTimestamp <= futureDateTimestamp) {
+                  console.log(`Found card with upcoming deadline: ${cardData.title || "Untitled"}`);
                   deadlineCards.push({
                     id: cardDoc.id,
                     title: cardData.title || "Untitled Card",
-                    dueDate: cardData.dueDate,
+                    dueDate: dueDate, // Keep original format for consistency with UI
                     boardId: boardId,
                     boardTitle: boardTitle,
                     columnId: columnId,
@@ -697,95 +982,37 @@ export const resolvers = {
           }
         }
         
-        // If no real deadlines found, provide fallback demo data
+        // If no real deadlines found, let the user know instead of providing fallback data
         if (deadlineCards.length === 0) {
-          console.log("No deadline cards found, using fallback data");
-          // Create fallback deadline cards with dates spread over the next week
-          const now = new Date();
-          
-          // Demo board/column data if we don't have real ones
-          const demoBoardId = boardsSnapshot.docs.length > 0 ? 
-            boardsSnapshot.docs[0].id : "demo-board-1";
-          const demoBoardTitle = boardsSnapshot.docs.length > 0 ? 
-            boardsSnapshot.docs[0].data().title || "Demo Board" : "Demo Board";
-            
-          const tomorrow = new Date(now);
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          
-          const threeDays = new Date(now);
-          threeDays.setDate(threeDays.getDate() + 3);
-          
-          const fiveDays = new Date(now);
-          fiveDays.setDate(fiveDays.getDate() + 5);
-          
-          deadlineCards = [
-            {
-              id: "deadline1",
-              title: "Complete dashboard widgets implementation",
-              dueDate: tomorrow.toISOString(),
-              boardId: demoBoardId,
-              boardTitle: demoBoardTitle,
-              columnId: "column1",
-              columnTitle: "In Progress"
-            },
-            {
-              id: "deadline2",
-              title: "Finalize GraphQL API",
-              dueDate: threeDays.toISOString(),
-              boardId: demoBoardId,
-              boardTitle: demoBoardTitle,
-              columnId: "column2",
-              columnTitle: "To Do"
-            },
-            {
-              id: "deadline3",
-              title: "Deploy to production",
-              dueDate: fiveDays.toISOString(),
-              boardId: demoBoardId,
-              boardTitle: demoBoardTitle,
-              columnId: "column3",
-              columnTitle: "Planning"
-            }
-          ];
-          
-          // Try to create these tasks in Firestore for future reference
-          try {
-            if (boardsSnapshot.docs.length > 0) {
-              const firstBoardId = boardsSnapshot.docs[0].id;
-              const columnsRef = adminDb.collection("boards").doc(firstBoardId).collection("columns");
-              const columnsSnapshot = await columnsRef.limit(1).get();
-              
-              if (!columnsSnapshot.empty) {
-                const firstColumnId = columnsSnapshot.docs[0].id;
-                const cardsRef = columnsRef.doc(firstColumnId).collection("cards");
-                
-                const batch = adminDb.batch();
-                deadlineCards.forEach(card => {
-                  // Adapt card to actual data structure for Firestore
-                  const cardRef = cardsRef.doc(card.id);
-                  const cardData = {
-                    title: card.title,
-                    dueDate: card.dueDate,
-                    order: Math.floor(Math.random() * 10),
-                    columnId: firstColumnId,
-                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
-                  };
-                  batch.set(cardRef, cardData);
-                });
-                await batch.commit();
-                console.log("Demo deadline cards stored in Firestore");
-              }
-            }
-          } catch (batchError) {
-            console.error("Error storing demo deadline cards:", batchError);
-            // Continue with returning the fallback data even if storage fails
-          }
+          console.log("No deadline cards found. Not using fallback data anymore.");
         }
         
-        // Sort by due date (ascending)
+        // Sort deadline cards by due date (earliest first)
         deadlineCards.sort((a, b) => {
-          return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+          // Handle different date formats
+          let dateA, dateB;
+          
+          if (typeof a.dueDate === 'object' && a.dueDate._seconds) {
+            dateA = new Date(a.dueDate._seconds * 1000);
+          } else if (typeof a.dueDate === 'string') {
+            dateA = new Date(a.dueDate);
+          } else if (a.dueDate instanceof Date) {
+            dateA = a.dueDate;
+          } else {
+            dateA = new Date(0); // Default to epoch if invalid
+          }
+          
+          if (typeof b.dueDate === 'object' && b.dueDate._seconds) {
+            dateB = new Date(b.dueDate._seconds * 1000);
+          } else if (typeof b.dueDate === 'string') {
+            dateB = new Date(b.dueDate);
+          } else if (b.dueDate instanceof Date) {
+            dateB = b.dueDate;
+          } else {
+            dateB = new Date(0); // Default to epoch if invalid
+          }
+          
+          return dateA.getTime() - dateB.getTime();
         });
         
         return deadlineCards;
@@ -795,7 +1022,93 @@ export const resolvers = {
       }
     },
 
-    // Get recent activity
+    search: async (_, { query }: { query: string }, { user }: Context) => {
+      try {
+        console.log(`Executing search for query: ${query}`);
+        
+        if (!user) {
+          throw new GraphQLError('Authentication required');
+        }
+        
+        const results: any[] = [];
+        
+        // 1. Search boards the user has access to
+        const boardsSnapshot = await adminDb.collection('boards')
+          .where('userId', '==', user.uid)
+          .get();
+          
+        // Add boards that match the query
+        for (const boardDoc of boardsSnapshot.docs) {
+          const boardData = boardDoc.data();
+          const title = boardData.title || '';
+          const description = boardData.description || '';
+          
+          if (
+            title.toLowerCase().includes(query.toLowerCase()) ||
+            description.toLowerCase().includes(query.toLowerCase())
+          ) {
+            results.push({
+              id: boardDoc.id,
+              type: 'board',
+              title: boardData.title,
+              boardId: boardDoc.id,
+              boardTitle: boardData.title,
+              description: boardData.description || ''
+            });
+          }
+          
+          // Get cards in this board's columns
+          const columnsSnapshot = await adminDb.collection('columns')
+            .where('boardId', '==', boardDoc.id)
+            .get();
+            
+          for (const columnDoc of columnsSnapshot.docs) {
+            const columnData = columnDoc.data();
+            const columnId = columnDoc.id;
+            
+            // Get cards in this column
+            const cardsSnapshot = await adminDb.collection('cards')
+              .where('columnId', '==', columnId)
+              .get();
+              
+            for (const cardDoc of cardsSnapshot.docs) {
+              const cardData = cardDoc.data();
+              const cardTitle = cardData.title || '';
+              const cardDescription = cardData.description || '';
+              
+              if (
+                cardTitle.toLowerCase().includes(query.toLowerCase()) ||
+                cardDescription.toLowerCase().includes(query.toLowerCase())
+              ) {
+                results.push({
+                  id: cardDoc.id,
+                  type: 'task',
+                  title: cardTitle,
+                  boardId: boardDoc.id,
+                  boardTitle: boardData.title,
+                  columnId: columnId,
+                  columnTitle: columnData.title,
+                  dueDate: cardData.dueDate,
+                  description: cardDescription
+                });
+              }
+            }
+          }
+        }
+        
+        // 2. For simplicity, we're only searching boards that the user owns
+        // In a production app, you'd want to create a proper index for a collection group query
+        // or maintain a separate collection that tracks all board memberships
+        
+        console.log(`Search completed with ${results.length} results`);
+        return results;
+      } catch (error) {
+        console.error('Error in search resolver:', error);
+        // Return empty array instead of null to avoid GraphQL error
+        return [];
+      }
+    },
+    
     recentActivity: async (_, args: RecentActivityArgs, { user }) => {
       if (!user) {
         throw new Error("Not authenticated");
@@ -824,6 +1137,22 @@ export const resolvers = {
             ...doc.data(),
           }));
           
+          // Filter out any demo/fallback activities that might have been stored previously
+          rawActivityData = rawActivityData.filter(activity => {
+            // Check if it's a demo activity by ID or boardId
+            const isDemoActivity = 
+              activity.id?.startsWith('demo-') || 
+              activity.id === 'activity1' || 
+              activity.id === 'activity2' || 
+              activity.id === 'activity3' || 
+              activity.id === 'activity4' || 
+              activity.id === 'activity5' || 
+              activity.boardId === 'demo-board-1' || 
+              activity.boardId === 'board1';
+              
+            return !isDemoActivity;
+          });
+          
           // Verify board titles and fix any missing ones
           activityData = await Promise.all(rawActivityData.map(async (activity) => {
             // If boardTitle is missing, try to fetch it from the board
@@ -845,7 +1174,6 @@ export const resolvers = {
               // No board ID available
               activity.boardTitle = 'Unknown Board';
             }
-            
             return activity;
           }));
         } catch (firestoreError) {
@@ -853,78 +1181,10 @@ export const resolvers = {
           // We'll handle this by using the fallback data below
         }
         
-        // If no real activity found, provide fallback demo data
+        // If no real activity found, return an empty array
         if (activityData.length === 0) {
-          console.log("No activity found, using fallback data");
-          // Generate timestamps starting from recent
-          const now = new Date();
-          
-          activityData = [
-            {
-              id: "activity1",
-              type: "CREATE_BOARD",
-              boardId: "board1",
-              boardTitle: "Project Roadmap",
-              userId: user.uid,
-              userName: user.displayName || user.email || "User",
-              timestamp: new Date(now.setHours(now.getHours() - 2)).toISOString(),
-              description: "Created a new board: Project Roadmap"
-            },
-            {
-              id: "activity2",
-              type: "ADD_CARD",
-              boardId: "board1",
-              boardTitle: "Project Roadmap",
-              userId: user.uid,
-              userName: user.displayName || user.email || "User",
-              timestamp: new Date(now.setHours(now.getHours() - 3)).toISOString(),
-              description: "Added task: Implement dashboard widgets"
-            },
-            {
-              id: "activity3",
-              type: "MOVE_CARD",
-              boardId: "board1",
-              boardTitle: "Project Roadmap",
-              userId: user.uid,
-              userName: user.displayName || user.email || "User",
-              timestamp: new Date(now.setHours(now.getHours() - 5)).toISOString(),
-              description: "Moved task: Fix GraphQL API errors to In Progress"
-            },
-            {
-              id: "activity4",
-              type: "INVITE_MEMBER",
-              boardId: "board1",
-              boardTitle: "Project Roadmap",
-              userId: user.uid,
-              userName: user.displayName || user.email || "User",
-              timestamp: new Date(now.setHours(now.getHours() - 24)).toISOString(),
-              description: "Invited team member: sarah@example.com"
-            },
-            {
-              id: "activity5",
-              type: "UPDATE_BOARD",
-              boardId: "board1",
-              boardTitle: "Project Roadmap",
-              userId: user.uid,
-              userName: user.displayName || user.email || "User",
-              timestamp: new Date(now.setHours(now.getHours() - 48)).toISOString(),
-              description: "Updated board background"
-            }
-          ];
-          
-          // Store these demo activities in Firestore for future use
-          try {
-            const batch = adminDb.batch();
-            activityData.forEach(activity => {
-              const activityRef = adminDb.collection("activities").doc(activity.id); // Changed from 'activity' to 'activities'
-              batch.set(activityRef, activity);
-            });
-            await batch.commit();
-            console.log("Demo activity data stored in Firestore");
-          } catch (batchError) {
-            console.error("Error storing demo activity data:", batchError);
-            // Continue with returning the fallback data even if storage fails
-          }
+          console.log("No activity found");
+          return activityData;
         }
         
         return activityData;
@@ -947,14 +1207,20 @@ export const resolvers = {
         
         // Get user data for activity and member info
         const userDoc = await adminDb.collection('users').doc(user.uid).get();
-        let userName = 'Admin';
-        let userEmail = '';
+        let userName = user.displayName || user.email || 'User';
+        let userEmail = user.email || '';
         
+        // If we have additional user data in Firestore, use it
         if (userDoc.exists) {
           const userData = userDoc.data();
           if (userData) {
-            userName = userData.name || userData.displayName || userData.email || 'Admin';
-            userEmail = userData.email || '';
+            // Use Firestore data only if it's better than what we already have
+            if (!userName || userName === 'User') {
+              userName = userData.name || userData.displayName || userData.email || userName;
+            }
+            if (!userEmail) {
+              userEmail = userData.email || userEmail;
+            }
           }
         }
         
@@ -984,7 +1250,6 @@ export const resolvers = {
         await logActivity({
           type: "BOARD_CREATED",
           userId: user.uid,
-          userName, // Explicitly pass the user's name
           boardId: boardRef.id,
           data: { title },
         });

@@ -44,8 +44,9 @@ import { FiSearch, FiBell, FiHelpCircle, FiSettings, FiCheckCircle, FiInfo, FiBo
 import { useAuth } from "@/contexts/auth-context";
 import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
-import { useLazyQuery } from "@apollo/client";
+import { useLazyQuery, useQuery, useMutation } from "@apollo/client";
 import { SEARCH_QUERY } from "@/graphql/search";
+import { GET_NOTIFICATIONS, MARK_NOTIFICATION_READ, MARK_ALL_NOTIFICATIONS_READ } from "@/graphql/notifications";
 
 export default function DashboardHeader() {
   const { user } = useAuth();
@@ -71,30 +72,57 @@ export default function DashboardHeader() {
     onClose: onHelpClose 
   } = useDisclosure();
 
-  // Mock notifications data
-  const notifications = [
-    {
-      id: 1,
-      title: "Task assigned to you",
-      description: "New task 'Update documentation' was assigned to you",
-      time: "10 minutes ago",
-      read: false,
-    },
-    {
-      id: 2,
-      title: "Card moved",
-      description: "Your card 'API Integration' was moved to 'Done'",
-      time: "2 hours ago",
-      read: true,
-    },
-    {
-      id: 3,
-      title: "Comment on your task",
-      description: "John added a comment to 'UI Design' task",
-      time: "1 day ago",
-      read: true,
-    },
-  ];
+  // Fetch notifications from the GraphQL API
+  const { loading: loadingNotifications, data: notificationsData, refetch: refetchNotifications } = useQuery(GET_NOTIFICATIONS, {
+    pollInterval: 30000, // Poll every 30 seconds to check for new notifications
+    fetchPolicy: "network-only"
+  });
+  
+  // Mark a notification as read
+  const [markNotificationRead] = useMutation(MARK_NOTIFICATION_READ, {
+    onCompleted: () => {
+      refetchNotifications();
+    }
+  });
+  
+  // Mark all notifications as read
+  const [markAllNotificationsRead] = useMutation(MARK_ALL_NOTIFICATIONS_READ, {
+    onCompleted: () => {
+      refetchNotifications();
+    }
+  });
+  
+  // Format the timestamp to a relative time (e.g., "2 hours ago")
+  const formatRelativeTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) {
+      return 'just now';
+    }
+    
+    const diffInMinutes = Math.floor(diffInSeconds / 60);
+    if (diffInMinutes < 60) {
+      return `${diffInMinutes} ${diffInMinutes === 1 ? 'minute' : 'minutes'} ago`;
+    }
+    
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) {
+      return `${diffInHours} ${diffInHours === 1 ? 'hour' : 'hours'} ago`;
+    }
+    
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays < 30) {
+      return `${diffInDays} ${diffInDays === 1 ? 'day' : 'days'} ago`;
+    }
+    
+    const diffInMonths = Math.floor(diffInDays / 30);
+    return `${diffInMonths} ${diffInMonths === 1 ? 'month' : 'months'} ago`;
+  };
+  
+  // Get notifications from the data
+  const notifications = notificationsData?.notifications || [];
 
   // Navigate to settings page
   const handleSettingsClick = () => {
@@ -262,10 +290,21 @@ export default function DashboardHeader() {
               <Box p={3} borderBottomWidth="1px">
                 <Flex justify="space-between" align="center">
                   <Text fontWeight="bold">Notifications</Text>
-                  <Text fontSize="sm" color="blue.500" cursor="pointer">Mark all as read</Text>
+                  <Text 
+                    fontSize="sm" 
+                    color="blue.500" 
+                    cursor="pointer"
+                    onClick={() => markAllNotificationsRead()}
+                  >
+                    Mark all as read
+                  </Text>
                 </Flex>
               </Box>
-              {notifications.length === 0 ? (
+              {loadingNotifications ? (
+                <Box p={4} textAlign="center">
+                  <Spinner size="sm" color="blue.500" />
+                </Box>
+              ) : notifications.length === 0 ? (
                 <Box p={4} textAlign="center">
                   <Text>No notifications</Text>
                 </Box>
@@ -278,10 +317,11 @@ export default function DashboardHeader() {
                     bg={!notification.read ? notificationBg : undefined}
                     cursor="pointer"
                     _hover={{ bg: notificationBg }}
+                    onClick={() => markNotificationRead({ variables: { id: notification.id } })}
                   >
                     <Text fontWeight={!notification.read ? "bold" : "normal"}>{notification.title}</Text>
                     <Text fontSize="sm" color="gray.600" mt={1}>{notification.description}</Text>
-                    <Text fontSize="xs" color="gray.500" mt={1}>{notification.time}</Text>
+                    <Text fontSize="xs" color="gray.500" mt={1}>{formatRelativeTime(notification.time)}</Text>
                   </Box>
                 ))
               )}
