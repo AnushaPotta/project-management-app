@@ -1,8 +1,17 @@
 import { NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
-import { Timestamp } from 'firebase-admin/firestore';
+// Commenting out Firebase Admin imports to allow deployment
+// import { adminDb } from '@/lib/firebase-admin';
+// import { Timestamp } from 'firebase-admin/firestore';
 
 export async function GET(request: Request) {
+  // Return mock response for deployment
+  return NextResponse.json({ 
+    success: true, 
+    message: "Test notifications endpoint is temporarily disabled for deployment",
+  });
+}
+
+/* Original code commented out for deployment
   try {
     // Get userId from query param
     const { searchParams } = new URL(request.url);
@@ -65,4 +74,4 @@ export async function GET(request: Request) {
       error: error instanceof Error ? error.message : String(error) 
     }, { status: 500 });
   }
-}
+} */
