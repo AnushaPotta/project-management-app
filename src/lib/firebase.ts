@@ -19,35 +19,86 @@ import {
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Your Firebase configuration
+// Check if we're in a browser environment and if all required Firebase config is available
+const isBrowser = typeof window !== 'undefined';
+const hasRequiredConfig = 
+  process.env.NEXT_PUBLIC_FIREBASE_API_KEY && 
+  process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN &&
+  process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
+// Firebase configuration - use placeholder values for build time
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'placeholder-api-key',
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'placeholder-project.firebaseapp.com',
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'placeholder-project',
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'placeholder-project.appspot.com',
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '000000000000',
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '1:000000000000:web:0000000000000000000000',
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || 'G-0000000000',
 };
 
-console.log(
-  "Firebase API Key:",
-  process.env.NEXT_PUBLIC_FIREBASE_API_KEY
-    ? "Exists (first 5 chars): " +
-        process.env.NEXT_PUBLIC_FIREBASE_API_KEY.substring(0, 5) +
-        "..."
-    : "Not found"
-);
-console.log(
-  "Firebase Auth Domain:",
-  process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ? "Exists" : "Not found"
-);
+// Log Firebase config status for debugging - only log in browser
+if (isBrowser) {
+  console.log(
+    "Firebase API Key:",
+    process.env.NEXT_PUBLIC_FIREBASE_API_KEY
+      ? "Exists (first 5 chars): " +
+          process.env.NEXT_PUBLIC_FIREBASE_API_KEY.substring(0, 5) +
+          "..."
+      : "Not found"
+  );
+  console.log(
+    "Firebase Auth Domain:",
+    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ? "Exists" : "Not found"
+  );
+}
 
-// Initialize Firebase
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
+// Only initialize Firebase if we're in a browser and have required config
+// or create a dummy instance for build time
+let app;
+if (isBrowser && hasRequiredConfig) {
+  app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+} else {
+  // During build time or without config, provide mock app
+  console.log('Creating mock Firebase app for build/SSR');
+  // This is a safety mechanism to prevent errors during build
+  if (getApps().length === 0) {
+    try {
+      app = initializeApp(firebaseConfig, 'placeholder-app');
+    } catch (error) {
+      console.warn('Could not initialize Firebase app:', error);
+      // Create a mock app object to prevent crashes
+      app = {} as any;
+    }
+  } else {
+    app = getApp();
+  }
+}
+// Initialize services conditionally
+let auth, db, storage;
+
+try {
+  // Only try to use Firebase services in browser with config
+  if (isBrowser && hasRequiredConfig) {
+    auth = getAuth(app);
+    db = getFirestore(app);
+    storage = getStorage(app);
+  } else {
+    // Create mock objects for build/SSR
+    auth = {
+      currentUser: null,
+      onAuthStateChanged: () => () => {}
+    } as any;
+    db = {} as any;
+    storage = {} as any;
+  }
+} catch (error) {
+  console.warn('Error initializing Firebase services:', error);
+  // Create fallback objects
+  auth = { currentUser: null, onAuthStateChanged: () => () => {} } as any;
+  db = {} as any;
+  storage = {} as any;
+}
 const googleProvider = new GoogleAuthProvider();
 
 // Authentication helper functions
