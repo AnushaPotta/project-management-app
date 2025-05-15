@@ -1,7 +1,16 @@
 import { NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
+// Commenting out Firebase Admin import to allow deployment
+// import { adminDb } from '@/lib/firebase-admin';
 
 export async function GET() {
+  // Return mock response for deployment
+  return NextResponse.json({ 
+    success: true, 
+    message: "Cleanup endpoint is temporarily disabled for deployment",
+  });
+}
+
+/* Original code commented out for deployment
   try {
     // Target board ID
     const boardId = "s4jWqr7mGBCY42fzctun"; // project X
@@ -103,4 +112,4 @@ export async function GET() {
       error: error instanceof Error ? error.message : String(error) 
     }, { status: 500 });
   }
-}
+} */
