@@ -34,22 +34,26 @@ const resolvers = {
         columnId: 'mock-column-id',
       };
     },
-    // Mock implementations for other mutations
+    // Mock implementations for other mutations - EXACTLY matching schema.ts mutation names
     createBoard: () => ({ id: 'mock-board-id', title: 'Mock Board' }),
     updateBoard: () => ({ id: 'mock-board-id', title: 'Updated Mock Board' }),
     deleteBoard: () => true,
-    createColumn: () => ({ id: 'mock-column-id', title: 'Mock Column' }),
+    markNotificationRead: () => true,
+    markAllNotificationsRead: () => true,
+    createTestNotifications: () => true,
+    inviteMember: () => ({ id: 'mock-board-id', title: 'Mock Board' }),
+    removeMember: () => ({ id: 'mock-board-id', title: 'Mock Board' }),
+    inviteMemberByEmail: () => ({ id: 'mock-invitation', email: 'user@example.com', status: 'PENDING' }),
+    acceptInvitation: () => ({ id: 'mock-board-id', title: 'Mock Board' }),
+    declineInvitation: () => true,
+    addColumn: () => ({ id: 'mock-board-id', title: 'Mock Board' }),
     updateColumn: () => ({ id: 'mock-column-id', title: 'Updated Mock Column' }),
-    deleteColumn: () => true,
-    createCard: () => ({ id: 'mock-card-id', title: 'Mock Card' }),
-    deleteCard: () => true,
-    moveCard: () => ({ id: 'mock-card-id', title: 'Moved Mock Card' }),
-    inviteMember: () => ({ success: true }),
-    updateMemberRole: () => ({ success: true }),
-    removeMember: () => ({ success: true }),
-    markNotificationRead: () => ({ success: true }),
-    markAllNotificationsRead: () => ({ success: true }),
-    createTestNotifications: () => ({ success: true })
+    deleteColumn: () => ({ id: 'mock-board-id', title: 'Mock Board' }),
+    moveColumn: () => ({ id: 'mock-board-id', title: 'Mock Board' }),
+    addCard: () => ({ id: 'mock-board-id', title: 'Mock Board' }),
+    deleteCard: () => ({ id: 'mock-board-id', title: 'Mock Board' }),
+    moveCard: () => ({ id: 'mock-board-id', title: 'Mock Board' }),
+    markTaskComplete: () => ({ id: 'mock-card-id', title: 'Completed Mock Card' })
   }
 };
 
