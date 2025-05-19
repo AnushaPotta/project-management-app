@@ -1,5 +1,5 @@
 // src/components/calendar/CalendarView.tsx
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Box,
   Grid,
@@ -9,6 +9,7 @@ import {
   Badge,
   useColorModeValue,
   Heading,
+  useBreakpointValue,
 } from "@chakra-ui/react";
 import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from "date-fns";
@@ -31,10 +32,19 @@ interface CalendarViewProps {
 export default function CalendarView({ tasks }: CalendarViewProps) {
   const router = useRouter();
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [isMounted, setIsMounted] = useState(false);
   const bgColor = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.700");
   const todayBg = useColorModeValue("blue.50", "blue.900");
   const dayBg = useColorModeValue("gray.50", "gray.700");
+  
+  // Use breakpoint value to handle responsive design without causing hydration errors
+  const isMobile = useBreakpointValue({ base: true, md: false });
+  
+  // Set mounted state to avoid hydration errors with window object
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   
   // Days of the week header
   const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -75,38 +85,58 @@ export default function CalendarView({ tasks }: CalendarViewProps) {
   };
   
   return (
-    <Box borderWidth="1px" borderRadius="lg" bg={bgColor} p={4}>
-      {/* Calendar header with month navigation */}
-      <Flex justify="space-between" align="center" mb={6}>
-        <Button leftIcon={<FiChevronLeft />} onClick={prevMonth} size="sm">
-          Previous
-        </Button>
-        
-        <Flex>
-          <Heading size="md">
+    <Box borderWidth="1px" borderRadius="lg" bg={bgColor} p={{ base: 2, md: 4 }}>
+      {/* Calendar header with month navigation - mobile optimized */}
+      <Flex 
+        justify="space-between" 
+        align="center" 
+        mb={{ base: 3, md: 6 }}
+        flexDir={{ base: "column", sm: "row" }}
+        gap={{ base: 2, sm: 0 }}
+      >
+        {/* Month title and Today button */}
+        <Flex 
+          justifyContent="center" 
+          alignItems="center" 
+          width="100%"
+          order={{ base: 1, sm: 2 }}
+          mb={{ base: 2, sm: 0 }}
+        >
+          <Heading size={{ base: "sm", md: "md" }} textAlign="center">
             {format(currentMonth, "MMMM yyyy")}
           </Heading>
-          <Button ml={4} size="sm" onClick={today}>
+          <Button ml={4} size="sm" onClick={today} colorScheme="blue" variant="outline">
             Today
           </Button>
         </Flex>
         
-        <Button rightIcon={<FiChevronRight />} onClick={nextMonth} size="sm">
-          Next
-        </Button>
+        {/* Month navigation buttons */}
+        <Flex 
+          width="100%" 
+          justify="space-between"
+          order={{ base: 2, sm: 1 }}
+        >
+          <Button leftIcon={<FiChevronLeft />} onClick={prevMonth} size="sm" width={{ base: "45%", sm: "auto" }}>
+            Previous
+          </Button>
+          <Button rightIcon={<FiChevronRight />} onClick={nextMonth} size="sm" width={{ base: "45%", sm: "auto" }}>
+            Next
+          </Button>
+        </Flex>
       </Flex>
       
-      {/* Days of the week header */}
+      {/* Days of the week header - abbreviate on mobile */}
       <Grid templateColumns="repeat(7, 1fr)" mb={2}>
         {daysOfWeek.map(day => (
           <Box key={day} textAlign="center" fontWeight="bold" py={2}>
-            {day}
+            <Text display={{ base: "none", sm: "block" }}>{day}</Text>
+            <Text display={{ base: "block", sm: "none" }}>{day.charAt(0)}</Text>
           </Box>
         ))}
       </Grid>
       
-      {/* Calendar grid */}
-      <Grid templateColumns="repeat(7, 1fr)" gap={1}>
+      {/* Calendar grid - with responsive cell heights */}
+      <Grid templateColumns="repeat(7, 1fr)" gap={{ base: 0.5, md: 1 }}>
         {calendarDays.map(day => {
           const tasksForDay = getTasksForDay(day);
           const isToday = isSameDay(day, new Date());
@@ -120,14 +150,17 @@ export default function CalendarView({ tasks }: CalendarViewProps) {
               borderWidth="1px"
               borderColor={borderColor}
               borderRadius="md"
-              p={2}
-              minH="100px"
+              p={{ base: 1, md: 2 }}
+              minH={{ base: "80px", sm: "90px", md: "100px" }}
+              maxH={{ base: "100px", md: "150px" }}
               position="relative"
+              overflow="hidden"
             >
               <Text 
                 fontWeight={isToday ? "bold" : "normal"}
                 textAlign="center"
-                mb={2}
+                mb={{ base: 1, md: 2 }}
+                fontSize={{ base: "xs", md: "sm" }}
               >
                 {format(day, "d")}
               </Text>
@@ -139,26 +172,28 @@ export default function CalendarView({ tasks }: CalendarViewProps) {
                     key={task.id}
                     bg="blue.100" 
                     color="blue.800"
-                    p={1}
+                    p={{ base: 0.5, md: 1 }}
                     borderRadius="md"
-                    fontSize="xs"
+                    fontSize={{ base: "2xs", md: "xs" }}
                     cursor="pointer"
                     onClick={() => handleTaskClick(task)}
                     _hover={{ bg: "blue.200" }}
                     overflow="hidden"
                     textOverflow="ellipsis"
                     whiteSpace="nowrap"
+                    mb={0.5}
                   >
-                    <Text fontWeight="medium">{task.title}</Text>
-                    <Badge size="sm" colorScheme="gray">
+                    <Text fontWeight="medium" fontSize={{ base: "2xs", md: "xs" }} noOfLines={1}>{task.title}</Text>
+                    <Badge size="sm" colorScheme="gray" fontSize={{ base: "2xs", md: "xs" }} display={{ base: tasksForDay.length > 2 ? "none" : "inline-flex", md: "inline-flex" }}>
                       {task.boardTitle}
                     </Badge>
                   </Box>
                 ))}
                 
-                {tasksForDay.length > 3 && (
-                  <Text fontSize="xs" textAlign="center" mt={1}>
-                    +{tasksForDay.length - 3} more
+                {/* Show 'more' indicator if there are too many tasks - reduce threshold on mobile */}
+                {isMounted && ((tasksForDay.length > 2 && isMobile) || (tasksForDay.length > 3 && !isMobile)) && (
+                  <Text fontSize={{ base: "2xs", md: "xs" }} textAlign="center" mt={0.5} color="blue.500" fontWeight="medium">
+                    +{tasksForDay.length - (isMobile ? 2 : 3)} more
                   </Text>
                 )}
               </Flex>

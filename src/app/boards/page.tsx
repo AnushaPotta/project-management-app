@@ -241,23 +241,19 @@ export default function BoardsPage() {
     // Board card renderer function to avoid code duplication
     const renderBoardCard = (board: Board) => (
       <Box
-        as={Link}
-        href={`/boards/${board.id}`}
-        key={board.id}
-        p={5}
+        onClick={() => router.push(`/boards/${board.id}`)}
+        height={{ base: "140px", md: "160px" }}
+        p={{ base: 4, md: 5 }}
         borderWidth="1px"
         borderRadius="md"
         borderColor={borderColor}
         bg={bgColor}
-        _hover={{
-          bg: hoverBgColor,
-          transform: "translateY(-2px)",
-          boxShadow: "md",
-          transition: "all 0.2s ease-in-out",
-        }}
-        transition="all 0.2s"
-        height="160px"
+        _hover={{ bg: hoverBgColor }}
+        cursor="pointer"
         position="relative"
+        overflow="hidden"
+        transition="transform 0.2s"
+        _active={{ transform: "scale(0.98)" }}
       >
         <Heading size="md" mb={2} noOfLines={1}>
           {board.title}
@@ -297,27 +293,27 @@ export default function BoardsPage() {
         {/* Starred Boards Section */}
         {starredBoards.length > 0 && (
           <>
-            <Flex align="center" mt={6} mb={4}>
+            <Flex align="center" mt={{ base: 4, md: 6 }} mb={{ base: 2, md: 4 }}>
               <Box color="yellow.400" mr={2}>★</Box>
-              <Heading size="md">Starred Boards</Heading>
+              <Heading size="sm" fontSize={{ base: "md", md: "lg" }}>Starred Boards</Heading>
             </Flex>
-            <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={5} mb={8}>
+            <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={{ base: 3, md: 5 }} mb={{ base: 6, md: 8 }}>
               {starredBoards.map((board) => renderBoardCard(board))}
             </SimpleGrid>
           </>
         )}
 
         {/* Regular Boards Section */}
-        <Heading size="md" mb={4} mt={6}>
+        <Heading size="sm" fontSize={{ base: "md", md: "lg" }} mb={{ base: 2, md: 4 }} mt={{ base: 4, md: 6 }}>
           {starredBoards.length > 0 ? "All Boards" : "Your Boards"}
         </Heading>
-        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={5}>
+        <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={{ base: 3, md: 5 }}>
           {regularBoards.map((board) => renderBoardCard(board))}
 
           <Flex
             justify="center"
             align="center"
-            p={5}
+            p={{ base: 4, md: 5 }}
             borderWidth="1px"
             borderRadius="md"
             borderStyle="dashed"
@@ -325,8 +321,10 @@ export default function BoardsPage() {
             bg={bgColor}
             _hover={{ bg: hoverBgColor }}
             cursor="pointer"
-            height="160px"
+            height={{ base: "140px", md: "160px" }}
             onClick={() => setIsCreateModalOpen(true)}
+            transition="transform 0.2s"
+            _active={{ transform: "scale(0.98)" }}
           >
             <Flex direction="column" align="center">
               <Icon as={FiPlus} w={8} h={8} mb={3} />
@@ -362,54 +360,70 @@ export default function BoardsPage() {
   };
 
   return (
-    <Box p={{ base: 4, md: 6 }}>
+    <Box p={{ base: 3, md: 6 }}>
       <Flex
         justify="space-between"
         align="center"
-        mb={6}
+        mb={{ base: 4, md: 6 }}
         direction={{ base: "column", sm: "row" }}
-        gap={{ base: 4, sm: 0 }}
+        gap={{ base: 3, sm: 0 }}
       >
-        <Heading size="lg">Your Boards</Heading>
-        <HStack spacing={2}>
-          <Tooltip label="Home">
-            <Button
-              leftIcon={<FiHome />}
-              size="sm"
-              variant="outline"
-              onClick={() => router.push("/")}
-            >
-              Home
-            </Button>
-          </Tooltip>
-          <Tooltip label="Dashboard">
-            <Button
-              leftIcon={<FiLayout />}
-              size="sm"
-              variant="outline"
-              onClick={() => router.push("/dashboard")}
-            >
-              Dashboard
-            </Button>
-          </Tooltip>
-          <Button
-            leftIcon={<FiRefreshCw />}
-            size="sm"
-            colorScheme="teal"
-            onClick={handleManualRefresh}
-            isLoading={isLoading && !isInitialLoad}
-          >
-            Refresh
-          </Button>
+        <Heading size={{ base: "md", md: "lg" }}>Your Boards</Heading>
+        
+        {/* Mobile optimized action buttons */}
+        <Flex 
+          direction={{ base: "column", sm: "row" }} 
+          gap={{ base: 2, sm: 2 }}
+          width={{ base: "100%", sm: "auto" }}
+        >
+          {/* Primary action button - Create Board */}
           <Button
             leftIcon={<FiPlus />}
             colorScheme="blue"
             onClick={() => setIsCreateModalOpen(true)}
             width={{ base: "full", sm: "auto" }}
+            order={{ base: 1, sm: 4 }} /* Reorder for mobile */
+            mb={{ base: 1, sm: 0 }}
           >
             Create Board
           </Button>
-        </HStack>
+          
+          {/* Secondary actions - in a separate row on mobile */}
+          <Flex width="100%" justify="space-between" gap={2}>
+            <Tooltip label="Home">
+              <Button
+                leftIcon={<FiHome />}
+                size="sm"
+                variant="outline"
+                onClick={() => router.push("/")}
+                flex={{ base: 1, sm: "auto" }}
+              >
+                Home
+              </Button>
+            </Tooltip>
+            <Tooltip label="Dashboard">
+              <Button
+                leftIcon={<FiLayout />}
+                size="sm"
+                variant="outline"
+                onClick={() => router.push("/dashboard")}
+                flex={{ base: 1, sm: "auto" }}
+              >
+                Dashboard
+              </Button>
+            </Tooltip>
+            <Button
+              leftIcon={<FiRefreshCw />}
+              size="sm"
+              colorScheme="teal"
+              onClick={handleManualRefresh}
+              isLoading={isLoading && !isInitialLoad}
+              flex={{ base: 1, sm: "auto" }}
+            >
+              Refresh
+            </Button>
+          </Flex>
+        </Flex>
       </Flex>
 
       {renderContent()}
