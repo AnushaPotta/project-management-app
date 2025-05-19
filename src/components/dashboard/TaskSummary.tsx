@@ -58,26 +58,44 @@ export default function TaskSummary() {
 
 
   return (
-    <Box p={5} shadow="md" borderWidth="1px" borderRadius="md">
-      <StatGroup>
-        <Stat>
-          <StatLabel>Total Tasks</StatLabel>
-          <StatNumber>{stats.total}</StatNumber>
+    <Box p={{ base: 3, md: 5 }} shadow="md" borderWidth="1px" borderRadius="md">
+      <StatGroup 
+        flexWrap="wrap" 
+        textAlign="center"
+        justifyContent={{ base: "space-around", md: "space-between" }}
+      >
+        <Stat 
+          minWidth={{ base: "40%", md: "auto" }} 
+          mb={{ base: 4, md: 0 }}
+          px={{ base: 1, md: 3 }}
+        >
+          <StatLabel fontSize={{ base: "xs", md: "sm" }}>Total Tasks</StatLabel>
+          <StatNumber fontSize={{ base: "xl", md: "2xl" }}>{stats.total}</StatNumber>
         </Stat>
 
-        <Stat>
-          <StatLabel>To Do</StatLabel>
-          <StatNumber>{stats.todo}</StatNumber>
+        <Stat 
+          minWidth={{ base: "40%", md: "auto" }} 
+          mb={{ base: 4, md: 0 }}
+          px={{ base: 1, md: 3 }}
+        >
+          <StatLabel fontSize={{ base: "xs", md: "sm" }}>To Do</StatLabel>
+          <StatNumber fontSize={{ base: "xl", md: "2xl" }}>{stats.todo}</StatNumber>
         </Stat>
 
-        <Stat>
-          <StatLabel>In Progress</StatLabel>
-          <StatNumber>{stats.inProgress}</StatNumber>
+        <Stat 
+          minWidth={{ base: "40%", md: "auto" }} 
+          px={{ base: 1, md: 3 }}
+        >
+          <StatLabel fontSize={{ base: "xs", md: "sm" }}>In Progress</StatLabel>
+          <StatNumber fontSize={{ base: "xl", md: "2xl" }}>{stats.inProgress}</StatNumber>
         </Stat>
 
-        <Stat>
-          <StatLabel>Completed</StatLabel>
-          <StatNumber>{stats.completed}</StatNumber>
+        <Stat 
+          minWidth={{ base: "40%", md: "auto" }} 
+          px={{ base: 1, md: 3 }}
+        >
+          <StatLabel fontSize={{ base: "xs", md: "sm" }}>Completed</StatLabel>
+          <StatNumber fontSize={{ base: "xl", md: "2xl" }}>{stats.completed}</StatNumber>
         </Stat>
       </StatGroup>
     </Box>

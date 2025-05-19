@@ -48,7 +48,11 @@ import { useLazyQuery, useQuery, useMutation } from "@apollo/client";
 import { SEARCH_QUERY } from "@/graphql/search";
 import { GET_NOTIFICATIONS, MARK_NOTIFICATION_READ, MARK_ALL_NOTIFICATIONS_READ } from "@/graphql/notifications";
 
-export default function DashboardHeader() {
+interface DashboardHeaderProps {
+  isMobile?: boolean;
+}
+
+export default function DashboardHeader({ isMobile = false }: DashboardHeaderProps) {
   const { user } = useAuth();
   const router = useRouter();
   const bgColor = useColorModeValue("white", "gray.800");
@@ -165,13 +169,15 @@ export default function DashboardHeader() {
 
   return (
     <Box
-      py={2}
-      px={4}
-      borderBottomWidth="1px"
+      as="header"
       bg={bgColor}
-      position="sticky"
+      px={isMobile ? 2 : 4}
+      py={isMobile ? 1 : 3}
+      boxShadow={isMobile ? "none" : "sm"}
+      position={isMobile ? "relative" : "sticky"}
       top={0}
       zIndex={10}
+      width="100%"
     >
       <Flex justify="space-between" align="center">
         <Popover
@@ -183,18 +189,21 @@ export default function DashboardHeader() {
           gutter={4}
         >
           <PopoverTrigger>
-            <InputGroup maxW="400px">
-              <InputLeftElement pointerEvents="none">
-                <FiSearch color="gray.300" />
-              </InputLeftElement>
-              <Input 
-                placeholder="Search boards and tasks... (Ctrl+/)" 
-                borderRadius="full"
-                value={searchQuery}
-                onChange={handleSearchChange}
-                ref={searchRef}
-              />
-            </InputGroup>
+            {!isMobile && (
+              <InputGroup maxW="300px">
+                <InputLeftElement pointerEvents="none">
+                  <FiSearch color="gray.300" />
+                </InputLeftElement>
+                <Input 
+                  ref={searchRef}
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  variant="filled"
+                  size="md"
+                />
+              </InputGroup>
+            )}
           </PopoverTrigger>
           <PopoverContent 
             w="400px" 
@@ -332,22 +341,24 @@ export default function DashboardHeader() {
           </Menu>
 
           {/* Help Menu */}
-          <IconButton
-            aria-label="Help"
-            icon={<FiHelpCircle />}
-            variant="ghost"
-            borderRadius="full"
-            onClick={onHelpOpen}
-          />
+          {!isMobile && (
+            <IconButton
+              aria-label="Help"
+              icon={<FiHelpCircle />}
+              variant="ghost"
+              onClick={onHelpOpen}
+            />
+          )}
 
           {/* Settings */}
-          <IconButton
-            aria-label="Settings"
-            icon={<FiSettings />}
-            variant="ghost"
-            borderRadius="full"
-            onClick={handleSettingsClick}
-          />
+          {!isMobile && (
+            <IconButton
+              aria-label="Settings"
+              icon={<FiSettings />}
+              variant="ghost"
+              onClick={handleSettingsClick}
+            />
+          )}
 
           {/* User Menu */}
           <Menu>

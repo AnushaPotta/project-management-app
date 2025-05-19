@@ -132,24 +132,31 @@ function DashboardContent() {
 
   return (
     <Box>
-      <Heading size="lg" mb={6}>
+      <Heading size={{ base: "md", md: "lg" }} mb={{ base: 4, md: 6 }}>
         Dashboard
       </Heading>
 
       {/* Task summary widget */}
-      <TaskSummary />
+      {/* Task summary widget with mobile responsive design */}
+      <Box mb={6}>
+        <TaskSummary />
+      </Box>
 
-      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6} mt={6}>
+      {/* Mobile-responsive grid for activity and deadlines */}
+      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={{ base: 4, md: 6 }} mt={{ base: 4, md: 6 }}>
         {/* Recent activity feed */}
-        <RecentActivity />
+        <Box mb={{ base: 4, md: 0 }}>
+          <RecentActivity />
+        </Box>
 
         {/* Upcoming deadlines */}
-        <UpcomingDeadlines />
+        <Box>
+          <UpcomingDeadlines />
+        </Box>
       </SimpleGrid>
 
-      {/* Board list */}
-      <Box mt={8}>
-
+      {/* Board list with improved mobile spacing */}
+      <Box mt={{ base: 6, md: 8 }} mb={{ base: 6, md: 0 }}>
         <BoardList
           boards={data?.boards || []}
           onBoardClick={handleBoardClick}
