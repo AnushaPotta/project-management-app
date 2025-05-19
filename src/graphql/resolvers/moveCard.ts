@@ -193,26 +193,8 @@ export const moveCardResolver = async (
     // Create notifications for relevant users
     try {
       console.log("*** CREATING NOTIFICATIONS FOR CARD MOVE ***");
-      let notificationsCreated = 0;
-
-      // Always create a notification for the board owner if they're not the one moving the card
-      if (boardData.userId && boardData.userId !== user.uid) {
-        console.log(`Creating notification for board owner: ${boardData.userId}`);
-        await createCardMovedNotification(
-          boardData.userId, // userId of board owner
-          movedCard.title || "Untitled Card",
-          sourceColumnData.title || "a column",
-          destColumnData.title || "another column",
-          boardData.title || "a board",
-          movedCard.id,
-          userName || "A user"
-        );
-        notificationsCreated++;
-      }
-
       // 1. Notify the card assignee if it's not the person who moved the card
       if (movedCard.assignedTo && movedCard.assignedTo !== user.uid) {
-        console.log(`Creating notification for card assignee: ${movedCard.assignedTo}`);
         await createCardMovedNotification(
           movedCard.assignedTo,
           movedCard.title || "Untitled Card",
@@ -222,7 +204,6 @@ export const moveCardResolver = async (
           movedCard.id,
           userName || "A user"
         );
-        notificationsCreated++;
       }
       
       // 2. Get board members to notify admins
@@ -232,13 +213,12 @@ export const moveCardResolver = async (
       for (const memberDoc of membersSnapshot.docs) {
         const memberData = memberDoc.data();
         
-        // Notify admin members who didn't move the card themselves
+        // Only notify admins who didn't move the card themselves
         if (memberData.role === 'ADMIN' && 
             memberData.userId && 
             memberData.userId !== user.uid && 
             (!movedCard.assignedTo || memberData.userId !== movedCard.assignedTo)) {
           
-          console.log(`Creating notification for board admin: ${memberData.userId}`);
           await createCardMovedNotification(
             memberData.userId,
             movedCard.title || "Untitled Card",
@@ -248,27 +228,8 @@ export const moveCardResolver = async (
             movedCard.id,
             userName || "A user"
           );
-          notificationsCreated++;
         }
       }
-      
-      // If no notifications were created, always create one for the current user
-      // This ensures at least one notification is created for testing
-      if (notificationsCreated === 0) {
-        console.log(`Creating fallback notification for current user: ${user.uid}`);
-        await createCardMovedNotification(
-          user.uid, // userId of current user
-          movedCard.title || "Untitled Card",
-          sourceColumnData.title || "a column",
-          destColumnData.title || "another column",
-          boardData.title || "a board",
-          movedCard.id,
-          "You" // Since it's for the current user
-        );
-        notificationsCreated++;
-      }
-      
-      console.log(`Total notifications created for card movement: ${notificationsCreated}`);
     } catch (notificationError) {
       // Log but don't fail the operation if notifications fail
       console.error("Failed to create notifications for card movement:", notificationError);

@@ -633,230 +633,228 @@ export const resolvers = {
       try {
         console.log(`\n=== TaskStats for user: ${user.uid} ===`);
         
-        // We need to directly check for both owned boards AND boards where user is a member/admin
-        // Since the original boards resolver might be missing something
+        // Get all boards for the user - using the improved method with member subcollection
+        console.log(`Fetching boards for user: ${user.uid}`);
         
-        // Create a set to track unique board IDs
-        const boardIds = new Set();
-        const boardsData = [];
-        
-        // 1. Get boards where user is the direct owner
-        console.log("Getting boards where user is the owner...");
-        const ownedBoardsSnapshot = await adminDb.collection("boards")
+        // First get boards the user created directly
+        const boardsRef = adminDb.collection("boards");
+        let boardsSnapshot = await boardsRef
           .where("userId", "==", user.uid)
           .get();
+          
+        let boardDocs = [...boardsSnapshot.docs];
         
-        console.log(`Found ${ownedBoardsSnapshot.docs.length} boards owned by user ${user.uid}`);
+        // Then check for boards where the user is a member via subcollection
+        console.log(`Checking for boards where user ${user.uid} is a member via subcollection`);
+        const boardsCollection = adminDb.collection('boards');
         
-        ownedBoardsSnapshot.docs.forEach(doc => {
-          boardIds.add(doc.id);
-          boardsData.push({
-            id: doc.id,
-            ...doc.data(),
-            accessType: 'owner' // For debugging
-          });
-        });
-        
-        // 2. Get boards where user is in memberIds array
-        console.log("Getting boards where user is in memberIds array...");
-        const memberBoardsSnapshot = await adminDb.collection("boards")
-          .where("memberIds", "array-contains", user.uid)
-          .get();
-        
-        console.log(`Found ${memberBoardsSnapshot.docs.length} boards with user ${user.uid} in memberIds`);
-        
-        memberBoardsSnapshot.docs.forEach(doc => {
-          if (!boardIds.has(doc.id)) { // Avoid duplicates
-            boardIds.add(doc.id);
-            boardsData.push({
-              id: doc.id,
-              ...doc.data(),
-              accessType: 'memberIds' // For debugging
-            });
-          }
-        });
-        
-        // 3. Get boards where user is in members subcollection
-        console.log("Getting boards where user is in members subcollection...");
-        
-        // Check all boards - this is potentially expensive but necessary to check the subcollections
-        const allBoardsSnapshot = await adminDb.collection('boards').get();
+        // Get all boards
+        const allBoardsSnapshot = await boardsCollection.get();
         console.log(`Checking through ${allBoardsSnapshot.docs.length} boards for user membership`);
         
-        // Log all boards for debugging
-        console.log('=== ALL AVAILABLE BOARDS ===');
-        allBoardsSnapshot.docs.forEach(doc => {
-          const boardData = doc.data();
-          console.log(`Board ID: ${doc.id}, Title: ${boardData.title || 'Untitled'}, Owner: ${boardData.userId || 'Unknown'}, MemberIds: ${JSON.stringify(boardData.memberIds || [])}`);
-        });
-        
+        // For each board, check if user is a member with ACCEPTED status
         for (const boardDoc of allBoardsSnapshot.docs) {
-          // Skip boards we already found
-          if (boardIds.has(boardDoc.id)) {
+          const boardId = boardDoc.id;
+          // Skip boards we already have
+          if (boardDocs.some(doc => doc.id === boardId)) {
             continue;
           }
           
-          const membersRef = boardDoc.ref.collection('members');
-          
-          // Check by userId first
-          const memberByUserIdQuery = await membersRef
-            .where('userId', '==', user.uid)
+          const membersCollection = boardsCollection.doc(boardId).collection('members');
+          const memberQuery = await membersCollection
+            .where('id', '==', user.uid)
             .where('status', '==', 'ACCEPTED')
+            .limit(1)
             .get();
             
-          if (!memberByUserIdQuery.empty) {
-            boardIds.add(boardDoc.id);
-            boardsData.push({
-              id: boardDoc.id,
-              ...boardDoc.data(),
-              accessType: 'subcollection-userId', // For debugging
-              role: memberByUserIdQuery.docs[0].data().role || 'MEMBER' // Include role info
-            });
-            continue; // Skip the email check for this board
-          }
-          
-          // If no match by userId, try by email
-          if (user.email) {
-            const memberByEmailQuery = await membersRef
-              .where('email', '==', user.email)
-              .where('status', '==', 'ACCEPTED')
-              .get();
-              
-            if (!memberByEmailQuery.empty) {
-              boardIds.add(boardDoc.id);
-              boardsData.push({
-                id: boardDoc.id,
-                ...boardDoc.data(),
-                accessType: 'subcollection-email', // For debugging
-                role: memberByEmailQuery.docs[0].data().role || 'MEMBER' // Include role info
-              });
-            }
+          if (!memberQuery.empty) {
+            boardDocs.push(boardDoc);
           }
         }
         
-        // Log all found boards with their access type for debugging
-        console.log("=== BOARDS SUMMARY ===");
-        boardsData.forEach(board => {
-          console.log(`Board: ${board.title} (${board.id}), Access: ${board.accessType}, Role: ${board.role || 'N/A'}`);
-        });
-        
-        console.log(`Found ${boardIds.size} total unique boards for user ${user.uid}`);
-        
-        if (boardIds.size === 0) {
-          console.log('\n=== Task Summary ===');
-          console.log('Total tasks: 0');
-          console.log('TODO: 0');
-          console.log('IN PROGRESS: 0');
-          console.log('COMPLETED: 0');
-          console.log('===================\n');
-          
-          return {
-            total: 0,
-            todo: 0,
-            inProgress: 0,
-            completed: 0
-          };
-        }
-        
-        // Calculate task statistics across all user's boards
+        console.log(`Found ${boardDocs.length} boards for user ${user.uid}`);
+
         let totalTasks = 0;
         let todoTasks = 0;
         let inProgressTasks = 0;
         let completedTasks = 0;
-        
-        // Process all the boards to get task statistics
-        for (const boardId of boardIds) {
-          console.log(`Processing board: ${boardId}`);
+
+        // Loop through each board using the board resolver to ensure consistent column access
+        for (const boardDoc of boardDocs) {
+          const boardId = boardDoc.id;
+          const boardData = boardDoc.data();
+          console.log(`\nProcessing board: ${boardData.title || boardId} (ID: ${boardId})`);
           
-          // Get columns in this board
-          const columnsSnapshot = await adminDb.collection('columns')
+          // Get board data using the same resolver used by the frontend
+          // This ensures we access columns the same way as the UI
+          const board = await resolvers.Query.board(null, { id: boardId }, { user });
+          const columns = board.columns || [];
+          
+          console.log(`- Board has ${columns.length} columns`);
+          console.log(`- Board details:`, JSON.stringify({
+            id: board.id,
+            title: board.title,
+            columnCount: columns.length
+          }));
+          
+          // First, print a summary of all columns and their cards
+          console.log(`\n--- COLUMN SUMMARY FOR BOARD ${board.title || boardId} ---`);
+          columns.forEach((column, index) => {
+            const columnId = column.id;
+            const columnTitle = column.title || 'Untitled';
+            const cards = column.cards || [];
+            console.log(`Column ${index+1}: "${columnTitle}" (ID: ${columnId}) - ${cards.length} cards`);
+            
+            // Log the first few cards for debugging
+            if (cards.length > 0) {
+              console.log(`  Card sample:`, cards.slice(0, 2).map(card => ({ 
+                id: card.id,
+                title: card.title,
+                createdAt: card.createdAt
+              })));
+            }
+          });
+          console.log(`--- END COLUMN SUMMARY ---\n`);
+          
+          // Process each column
+          // WARNING: There seems to be a mismatch in data structure between UI and resolver
+          // Instead of using the columns from the board resolver, let's fetch directly from top-level columns collection
+          
+          console.log(`Fetching columns from top-level collection for board ${boardId}`);
+          const columnsCollection = adminDb.collection('columns');
+          const topLevelColumnsQuery = await columnsCollection
             .where('boardId', '==', boardId)
             .get();
             
-          console.log(`Found ${columnsSnapshot.docs.length} columns in board ${boardId}`);
-            
-          // Process each column
-          for (const columnDoc of columnsSnapshot.docs) {
-            const columnId = columnDoc.id;
+          console.log(`Found ${topLevelColumnsQuery.docs.length} columns in the top-level collection for board ${boardId}`);
+          
+          for (const columnDoc of topLevelColumnsQuery.docs) {
             const column = columnDoc.data();
+            const columnId = columnDoc.id;
+            const columnTitle = (column.title || '').toLowerCase();
             
-            // Get cards in this column
-            console.log(`Fetching cards for column: ${columnId} in board: ${boardId}`);
-            
-            let cards = [];
-            try {
-              // First try getting cards from the top-level cards collection
-              const cardsCollection = adminDb.collection('cards')
-                .where('columnId', '==', columnId);
-              
-              const cardsSnapshot = await cardsCollection.get();
-              console.log(`Raw card count from Firestore for column ${columnId}: ${cardsSnapshot.docs.length}`);
-              
-              if (cardsSnapshot.docs.length > 0) {
-                cards = cardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-              } else {
-                // As a fallback, try getting the column directly and then accessing its cards subcollection
-                const columnRef = adminDb.collection('columns').doc(columnId);
-                const cardsRef = columnRef.collection('cards');
-                const altCardsSnapshot = await cardsRef.get();
-                
-                console.log(`Alternate approach card count for column ${columnId}: ${altCardsSnapshot.docs.length}`);
-                
-                if (altCardsSnapshot.docs.length > 0) {
-                  cards = altCardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                }
-              }
-            } catch (error) {
-              console.error(`Error fetching cards for column ${columnId}:`, error);
-              // Continue with empty cards array
-            }
+            // Fetch cards for this column from its subcollection
+            const cardsCollection = columnDoc.ref.collection('cards');
+            const cardsSnapshot = await cardsCollection.get();
+            const cards = cardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
             // Debug card details
             console.log(`Processing column: "${column.title}" (ID: ${columnId})`);
             console.log(`- Cards in this column: ${cards.length}`);
             
+            // Process each card and get details for debugging
+            if (cards.length > 0) {
+              console.log(`- Card IDs: ${cards.map(c => c.id).join(', ').substring(0, 100)}${cards.length > 3 ? '...' : ''}`);
+            }
+            
             const cardsCount = cards.length;
             totalTasks += cardsCount;
             
-            // Categorize tasks based on column title (case insensitive)
-            const columnTitle = (column.title || '').toLowerCase();
+            // Debug column titles with exact string for pattern matching
+            console.log(`Column title: "${columnTitle}", cards: ${cardsCount}`);
+
+            // Categorize tasks based on column title (with expanded patterns)
+            // First log exact column title for debugging
+            console.log(`  Raw column title: "${column.title}", Lowercase: "${columnTitle}"`);
             
-            if (columnTitle.includes('todo') || columnTitle.includes('to do') || columnTitle.includes('backlog')) {
+            // TODO column patterns
+            if (
+              // Standard patterns
+              columnTitle.includes("todo") || 
+              columnTitle.includes("to do") || 
+              columnTitle.includes("to-do") || 
+              columnTitle.includes("plan") || 
+              columnTitle.includes("backlog") || 
+              columnTitle.includes("new") || 
+              columnTitle.includes("queue") || 
+              columnTitle.includes("pending") || 
+              columnTitle.includes("upcoming") ||
+              columnTitle === "to" ||
+              // Add specific column names from your board
+              columnTitle === "to do" ||
+              // No longer check position since we're not using the columns array from the board
+              // Instead, match any remaining common patterns
+              columnTitle === "first column" ||
+              columnTitle === "left column"
+            ) {
               todoTasks += cardsCount;
               console.log(`  → Counted as TODO: ${cardsCount} cards`);
-            } else if (columnTitle.includes('done') || columnTitle.includes('complete') || columnTitle.includes('finished')) {
+            } 
+            // DONE column patterns
+            else if (
+              // Standard patterns
+              columnTitle.includes("done") || 
+              columnTitle.includes("complete") || 
+              columnTitle.includes("finished") || 
+              columnTitle.includes("archived") || 
+              columnTitle.includes("closed") ||
+              columnTitle === "completed" ||
+              // Add specific column names from your board
+              columnTitle === "done" ||
+              // Add more potential matches for last column
+              columnTitle === "last column" ||
+              columnTitle === "right column" ||
+              // No longer check position since we're not using the columns array from the board
+              columnTitle === "right column"
+            ) {
               completedTasks += cardsCount;
               console.log(`  → Counted as COMPLETED: ${cardsCount} cards`);
-            } else {
+            } 
+            // IN PROGRESS patterns
+            else if (
+              // Standard patterns
+              columnTitle.includes("progress") || 
+              columnTitle.includes("doing") || 
+              columnTitle.includes("in progress") || 
+              columnTitle.includes("ongoing") || 
+              columnTitle.includes("working") || 
+              columnTitle.includes("started") || 
+              columnTitle.includes("development") || 
+              columnTitle.includes("review") || 
+              columnTitle.includes("testing") ||
+              // Add specific column names from your board
+              columnTitle === "doing" ||
+              columnTitle === "in progress" ||
+              // Add more potential matches for middle columns
+              columnTitle === "middle column" ||
+              // No longer check position since we're not using the columns array from the board
+              columnTitle === "middle column"
+            ) {
               inProgressTasks += cardsCount;
               console.log(`  → Counted as IN PROGRESS: ${cardsCount} cards`);
+            } else {
+              // Any other column types
+              todoTasks += cardsCount;
+              console.log(`  → Default counted as TODO: ${cardsCount} cards (uncategorized column)`);
             }
-          }
-        }
-        
-        console.log('\n=== Task Summary ===');
-        console.log(`Total tasks: ${totalTasks}`);
-        console.log(`TODO: ${todoTasks}`);
-        console.log(`IN PROGRESS: ${inProgressTasks}`);
-        console.log(`COMPLETED: ${completedTasks}`);
-        console.log('===================\n');
-        
-        return {
-          total: totalTasks,
-          todo: todoTasks,
-          inProgress: inProgressTasks,
-          completed: completedTasks
-        };
-      } catch (error) {
-        console.error("Error getting task statistics:", error);
-        return {
-          total: 0,
-          todo: 0,
-          inProgress: 0,
-          completed: 0
-        };
       }
-    },
+    }
+
+    // Summary of task counts
+    console.log(`\n=== Task Summary ===`);
+    console.log(`Total tasks: ${totalTasks}`);
+    console.log(`TODO: ${todoTasks}`);
+    console.log(`IN PROGRESS: ${inProgressTasks}`);
+    console.log(`COMPLETED: ${completedTasks}`);
+    console.log(`===================\n`);
+    
+    return {
+      total: totalTasks,
+      todo: todoTasks,
+      inProgress: inProgressTasks,
+      completed: completedTasks
+    };
+  } catch (error) {
+    console.error("Error calculating task stats:", error);
+    // Return empty data on error
+    return {
+      total: 0,
+      todo: 0,
+      inProgress: 0,
+      completed: 0
+    };
+  }
+},
 
 // Get upcoming deadlines
 upcomingDeadlines: async (_, { days = 7 }, { user }) => {
@@ -876,106 +874,38 @@ upcomingDeadlines: async (_, { days = 7 }, { user }) => {
         const futureDateTimestamp = futureDate.toISOString();
         
         // Get all boards for the user - similar to the taskStats resolver
-        // We need to use the same approach we used for taskStats to ensure consistency
-        console.log(`Fetching boards for upcoming deadlines for user: ${user.uid}`);
-        
-        // Create a set to track unique board IDs and an array to store board documents
-        const boardIds = new Set();
-        let boardDocs = [];
-        
-        // 1. Get boards where user is the direct owner
-        console.log("Getting boards where user is the owner...");
-        const ownedBoardsSnapshot = await adminDb.collection("boards")
+        // First get boards the user created
+        const boardsRef = adminDb.collection("boards");
+        let boardsSnapshot = await boardsRef
           .where("userId", "==", user.uid)
           .get();
+          
+        let boardDocs = [...boardsSnapshot.docs];
         
-        console.log(`Found ${ownedBoardsSnapshot.docs.length} boards owned by user ${user.uid}`);
-        ownedBoardsSnapshot.docs.forEach(doc => {
-          boardIds.add(doc.id);
-          boardDocs.push(doc);
-        });
-        
-        // 2. Get boards where user is in memberIds array
-        console.log("Getting boards where user is in memberIds array...");
-        const memberBoardsSnapshot = await adminDb.collection("boards")
-          .where("memberIds", "array-contains", user.uid)
-          .get();
-        
-        console.log(`Found ${memberBoardsSnapshot.docs.length} boards with user ${user.uid} in memberIds`);
-        memberBoardsSnapshot.docs.forEach(doc => {
-          if (!boardIds.has(doc.id)) { // Avoid duplicates
-            boardIds.add(doc.id);
-            boardDocs.push(doc);
-          }
-        });
-        
-        // 3. Get boards where user is in members subcollection
-        console.log("Getting boards where user is in members subcollection...");
+        // Then check for boards where user is a member via subcollection
+        console.log(`Checking for boards where user ${user.uid} is a member for deadlines`);
         const boardsCollection = adminDb.collection('boards');
-        const allBoardsSnapshot = await boardsCollection.get();
-        console.log(`Checking through ${allBoardsSnapshot.docs.length} boards for user membership`);
         
+        // Get all boards
+        const allBoardsSnapshot = await boardsCollection.get();
+        
+        // For each board, check if user is a member with ACCEPTED status
         for (const boardDoc of allBoardsSnapshot.docs) {
           const boardId = boardDoc.id;
-          // Skip boards we already found
-          if (boardIds.has(boardId)) {
+          // Skip boards we already have
+          if (boardDocs.some(doc => doc.id === boardId)) {
             continue;
           }
           
-          const membersRef = boardDoc.ref.collection('members');
-          
-          // Try different approaches to find the user's membership
-          
-          // First check by userId
-          try {
-            const memberByUserIdQuery = await membersRef
-              .where('userId', '==', user.uid)
-              .where('status', '==', 'ACCEPTED')
-              .get();
-              
-            if (!memberByUserIdQuery.empty) {
-              boardIds.add(boardId);
-              boardDocs.push(boardDoc);
-              console.log(`Found board ${boardId} where user ${user.uid} is a member by userId`);
-              continue; // Skip other checks for this board
-            }
-          } catch (error) {
-            console.error(`Error checking membership by userId for board ${boardId}:`, error);
-          }
-          
-          // Then try by id field
-          try {
-            const memberByIdQuery = await membersRef
-              .where('id', '==', user.uid)
-              .where('status', '==', 'ACCEPTED')
-              .get();
-              
-            if (!memberByIdQuery.empty) {
-              boardIds.add(boardId);
-              boardDocs.push(boardDoc);
-              console.log(`Found board ${boardId} where user ${user.uid} is a member by id field`);
-              continue; // Skip other checks for this board
-            }
-          } catch (error) {
-            console.error(`Error checking membership by id for board ${boardId}:`, error);
-          }
-          
-          // Finally try by email if available
-          if (user.email) {
-            try {
-              const memberByEmailQuery = await membersRef
-                .where('email', '==', user.email)
-                .where('status', '==', 'ACCEPTED')
-                .get();
-                
-              if (!memberByEmailQuery.empty) {
-                boardIds.add(boardId);
-                boardDocs.push(boardDoc);
-                console.log(`Found board ${boardId} where user is a member by email ${user.email}`);
-              }
-            } catch (error) {
-              console.error(`Error checking membership by email for board ${boardId}:`, error);
-            }
+          const membersCollection = boardsCollection.doc(boardId).collection('members');
+          const memberQuery = await membersCollection
+            .where('id', '==', user.uid)
+            .where('status', '==', 'ACCEPTED')
+            .limit(1)
+            .get();
+            
+          if (!memberQuery.empty) {
+            boardDocs.push(boardDoc);
           }
         }
         
@@ -1003,45 +933,13 @@ upcomingDeadlines: async (_, { days = 7 }, { user }) => {
             const columnData = columnDoc.data();
             const columnTitle = columnData.title || "Untitled Column";
             
-            // Get cards using both approaches we used in taskStats
-            console.log(`Fetching cards for deadlines in column: ${columnId} (${columnTitle}) in board: ${boardId}`);
+            // Get cards from the column's cards subcollection (correct path)
+            const cardsRef = columnDoc.ref.collection("cards");
+            const cardsSnapshot = await cardsRef.get();
             
-            let cards = [];
+            console.log(`Checking ${cardsSnapshot.docs.length} cards in column "${columnTitle}" (ID: ${columnId})`);
             
-            // First try getting cards from the top-level cards collection
-            try {
-              const cardsCollection = adminDb.collection('cards')
-                .where('columnId', '==', columnId);
-              
-              const topLevelCardsSnapshot = await cardsCollection.get();
-              console.log(`Top-level cards collection returned ${topLevelCardsSnapshot.docs.length} cards for column ${columnId}`);
-              
-              if (topLevelCardsSnapshot.docs.length > 0) {
-                cards = topLevelCardsSnapshot.docs;
-              }
-            } catch (error) {
-              console.error(`Error fetching cards from top-level collection for column ${columnId}:`, error);
-            }
-            
-            // If we didn't find any cards in the top-level collection, try the subcollection
-            if (cards.length === 0) {
-              try {
-                const cardsRef = columnDoc.ref.collection("cards");
-                const subCollectionSnapshot = await cardsRef.get();
-                console.log(`Subcollection approach returned ${subCollectionSnapshot.docs.length} cards for column ${columnId}`);
-                
-                if (subCollectionSnapshot.docs.length > 0) {
-                  cards = subCollectionSnapshot.docs;
-                }
-              } catch (error) {
-                console.error(`Error fetching cards from subcollection for column ${columnId}:`, error);
-              }
-            }
-            
-            console.log(`Total cards found for column "${columnTitle}" (ID: ${columnId}): ${cards.length}`);
-            
-            // Process the cards we found
-            for (const cardDoc of cards) {
+            for (const cardDoc of cardsSnapshot.docs) {
               const cardData = cardDoc.data();
               
               // Check if the card has a due date
@@ -1122,93 +1020,7 @@ upcomingDeadlines: async (_, { days = 7 }, { user }) => {
       }
     },
 
-    search: async (_, { query }: { query: string }, { user }: Context) => {
-      try {
-        console.log(`Executing search for query: ${query}`);
-        
-        if (!user) {
-          throw new GraphQLError('Authentication required');
-        }
-        
-        const results: any[] = [];
-        
-        // 1. Search boards the user has access to
-        const boardsSnapshot = await adminDb.collection('boards')
-          .where('userId', '==', user.uid)
-          .get();
-          
-        // Add boards that match the query
-        for (const boardDoc of boardsSnapshot.docs) {
-          const boardData = boardDoc.data();
-          const title = boardData.title || '';
-          const description = boardData.description || '';
-          
-          if (
-            title.toLowerCase().includes(query.toLowerCase()) ||
-            description.toLowerCase().includes(query.toLowerCase())
-          ) {
-            results.push({
-              id: boardDoc.id,
-              type: 'board',
-              title: boardData.title,
-              boardId: boardDoc.id,
-              boardTitle: boardData.title,
-              description: boardData.description || ''
-            });
-          }
-          
-          // Get cards in this board's columns
-          const columnsSnapshot = await adminDb.collection('columns')
-            .where('boardId', '==', boardDoc.id)
-            .get();
-            
-          for (const columnDoc of columnsSnapshot.docs) {
-            const columnData = columnDoc.data();
-            const columnId = columnDoc.id;
-            
-            // Get cards in this column
-            const cardsSnapshot = await adminDb.collection('cards')
-              .where('columnId', '==', columnId)
-              .get();
-              
-            for (const cardDoc of cardsSnapshot.docs) {
-              const cardData = cardDoc.data();
-              const cardTitle = cardData.title || '';
-              const cardDescription = cardData.description || '';
-              
-              if (
-                cardTitle.toLowerCase().includes(query.toLowerCase()) ||
-                cardDescription.toLowerCase().includes(query.toLowerCase())
-              ) {
-                results.push({
-                  id: cardDoc.id,
-                  type: 'task',
-                  title: cardTitle,
-                  boardId: boardDoc.id,
-                  boardTitle: boardData.title,
-                  columnId: columnId,
-                  columnTitle: columnData.title,
-                  dueDate: cardData.dueDate,
-                  description: cardDescription
-                });
-              }
-            }
-          }
-        }
-        
-        // 2. For simplicity, we're only searching boards that the user owns
-        // In a production app, you'd want to create a proper index for a collection group query
-        // or maintain a separate collection that tracks all board memberships
-        
-        console.log(`Search completed with ${results.length} results`);
-        return results;
-      } catch (error) {
-        console.error('Error in search resolver:', error);
-        // Return empty array instead of null to avoid GraphQL error
-        return [];
-      }
-    },
-    
+    // Get recent activity
     recentActivity: async (_, args: RecentActivityArgs, { user }) => {
       if (!user) {
         throw new Error("Not authenticated");
@@ -1237,22 +1049,6 @@ upcomingDeadlines: async (_, { days = 7 }, { user }) => {
             ...doc.data(),
           }));
           
-          // Filter out any demo/fallback activities that might have been stored previously
-          rawActivityData = rawActivityData.filter(activity => {
-            // Check if it's a demo activity by ID or boardId
-            const isDemoActivity = 
-              activity.id?.startsWith('demo-') || 
-              activity.id === 'activity1' || 
-              activity.id === 'activity2' || 
-              activity.id === 'activity3' || 
-              activity.id === 'activity4' || 
-              activity.id === 'activity5' || 
-              activity.boardId === 'demo-board-1' || 
-              activity.boardId === 'board1';
-              
-            return !isDemoActivity;
-          });
-          
           // Verify board titles and fix any missing ones
           activityData = await Promise.all(rawActivityData.map(async (activity) => {
             // If boardTitle is missing, try to fetch it from the board
@@ -1274,6 +1070,7 @@ upcomingDeadlines: async (_, { days = 7 }, { user }) => {
               // No board ID available
               activity.boardTitle = 'Unknown Board';
             }
+            
             return activity;
           }));
         } catch (firestoreError) {
@@ -1281,10 +1078,78 @@ upcomingDeadlines: async (_, { days = 7 }, { user }) => {
           // We'll handle this by using the fallback data below
         }
         
-        // If no real activity found, return an empty array
+        // If no real activity found, provide fallback demo data
         if (activityData.length === 0) {
-          console.log("No activity found");
-          return activityData;
+          console.log("No activity found, using fallback data");
+          // Generate timestamps starting from recent
+          const now = new Date();
+          
+          activityData = [
+            {
+              id: "activity1",
+              type: "CREATE_BOARD",
+              boardId: "board1",
+              boardTitle: "Project Roadmap",
+              userId: user.uid,
+              userName: user.displayName || user.email || "User",
+              timestamp: new Date(now.setHours(now.getHours() - 2)).toISOString(),
+              description: "Created a new board: Project Roadmap"
+            },
+            {
+              id: "activity2",
+              type: "ADD_CARD",
+              boardId: "board1",
+              boardTitle: "Project Roadmap",
+              userId: user.uid,
+              userName: user.displayName || user.email || "User",
+              timestamp: new Date(now.setHours(now.getHours() - 3)).toISOString(),
+              description: "Added task: Implement dashboard widgets"
+            },
+            {
+              id: "activity3",
+              type: "MOVE_CARD",
+              boardId: "board1",
+              boardTitle: "Project Roadmap",
+              userId: user.uid,
+              userName: user.displayName || user.email || "User",
+              timestamp: new Date(now.setHours(now.getHours() - 5)).toISOString(),
+              description: "Moved task: Fix GraphQL API errors to In Progress"
+            },
+            {
+              id: "activity4",
+              type: "INVITE_MEMBER",
+              boardId: "board1",
+              boardTitle: "Project Roadmap",
+              userId: user.uid,
+              userName: user.displayName || user.email || "User",
+              timestamp: new Date(now.setHours(now.getHours() - 24)).toISOString(),
+              description: "Invited team member: sarah@example.com"
+            },
+            {
+              id: "activity5",
+              type: "UPDATE_BOARD",
+              boardId: "board1",
+              boardTitle: "Project Roadmap",
+              userId: user.uid,
+              userName: user.displayName || user.email || "User",
+              timestamp: new Date(now.setHours(now.getHours() - 48)).toISOString(),
+              description: "Updated board background"
+            }
+          ];
+          
+          // Store these demo activities in Firestore for future use
+          try {
+            const batch = adminDb.batch();
+            activityData.forEach(activity => {
+              const activityRef = adminDb.collection("activities").doc(activity.id); // Changed from 'activity' to 'activities'
+              batch.set(activityRef, activity);
+            });
+            await batch.commit();
+            console.log("Demo activity data stored in Firestore");
+          } catch (batchError) {
+            console.error("Error storing demo activity data:", batchError);
+            // Continue with returning the fallback data even if storage fails
+          }
         }
         
         return activityData;
@@ -1968,20 +1833,6 @@ upcomingDeadlines: async (_, { days = 7 }, { user }) => {
         }
         console.log('Successfully saved member to database:', verifyDoc.data());
 
-        // Log activity for member invitation
-        await logActivity({
-          type: "MEMBER_INVITED",
-          userId: user.uid,
-          boardId,
-          description: `Invited ${email} to board ${board.title}`,
-          boardTitle: board.title,
-          data: { 
-            email: email,
-            role: memberData.role,
-            boardTitle: board.title
-          },
-        });
-
         // Generate invitation link with the board ID and member ID
         const invitationLink = `${process.env.NEXT_PUBLIC_APP_URL}/api/invitations/accept?boardId=${boardId}&memberId=${memberRef.id}`;
 
@@ -2121,18 +1972,12 @@ upcomingDeadlines: async (_, { days = 7 }, { user }) => {
           }
         }
         
-        // Get board title for the activity log (using the boardDoc we already fetched)
-        const currentBoardData = boardDoc.data();
-        const boardTitle = currentBoardData?.title || 'Unknown Board';
-
         // Log the activity
         await logActivity({
           type: "MEMBER_REMOVED",
           userId: user.uid,
           boardId: boardId,
-          boardTitle: boardTitle,
-          description: `Removed a member from board ${boardTitle}`,
-          data: { memberId, boardId, boardTitle }
+          data: { memberId, boardId }
         });
         
         // Explicitly fetch the updated members list

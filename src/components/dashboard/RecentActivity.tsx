@@ -11,7 +11,6 @@ import {
   Icon,
   Button,
   Divider,
-  Skeleton,
 } from "@chakra-ui/react";
 import { GET_RECENT_ACTIVITY } from "@/graphql/dashboard"; // Adjust path if needed
 import { formatDistanceToNow } from "date-fns";
@@ -22,9 +21,7 @@ export default function RecentActivity() {
   const router = useRouter();
   const { data, loading, error } = useQuery(GET_RECENT_ACTIVITY, {
     variables: { limit: 10 },
-    fetchPolicy: 'cache-and-network',
-    nextFetchPolicy: 'cache-first',
-    pollInterval: 300000, // Reduce polling frequency: refresh every 5 minutes instead of every minute
+    pollInterval: 60000, // Optional: refresh every minute
   });
 
   const handleActivityClick = (activity) => {
@@ -43,26 +40,9 @@ export default function RecentActivity() {
         <Heading size="md" mb={4}>
           Recent Activity
         </Heading>
-        <VStack spacing={4} align="stretch">
-          {[1, 2, 3].map((i) => (
-            <Box key={i} p={3} borderWidth="1px" borderRadius="md">
-              <Flex justify="space-between" align="center">
-                <Flex align="center">
-                  <Spinner size="xs" mr={2} />
-                  <Box width="100px">
-                    <Skeleton height="20px" width="80%" />
-                  </Box>
-                </Flex>
-                <Skeleton height="16px" width="60px" />
-              </Flex>
-              <Skeleton height="18px" width="90%" mt={2} />
-              <Flex mt={2}>
-                <Skeleton height="20px" width="80px" mr={2} borderRadius="full" />
-                <Skeleton height="20px" width="60px" borderRadius="full" />
-              </Flex>
-            </Box>
-          ))}
-        </VStack>
+        <Flex justify="center" align="center" h="200px">
+          <Spinner size="xl" />
+        </Flex>
       </Box>
     );
   }

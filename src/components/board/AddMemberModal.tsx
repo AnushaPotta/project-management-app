@@ -200,28 +200,18 @@ export default function AddMemberModal({
               {/* Members Tab */}
               <TabPanel p={0}>
                 {boardLoading ? (
-                  <Box textAlign="center" py={4}>
-                    <Spinner size="md" color="purple.500" />
-                    <Text mt={2}>Loading members...</Text>
+                  <Flex justify="center" py={8}>
+                    <Spinner />
+                  </Flex>
+                ) : members.length === 0 ? (
+                  <Box textAlign="center" py={6}>
+                    <Text color="gray.500">No members found.</Text>
                     {isOwner && (
                       <Button
                         mt={4}
                         colorScheme="blue"
                         variant="outline"
                         size="sm"
-                        onClick={() => setActiveTab(1)}
-                      >
-                        Invite Members
-                      </Button>
-                    )}
-                  </Box>
-                ) : members.length === 0 ? (
-                  <Box textAlign="center" py={4}>
-                    <Text>No members found</Text>
-                    {isOwner && (
-                      <Button
-                        mt={4}
-                        colorScheme="blue"
                         onClick={() => setActiveTab(1)}
                       >
                         Invite Members

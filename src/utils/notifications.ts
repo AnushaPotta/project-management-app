@@ -15,16 +15,11 @@ interface NotificationData {
  */
 export const createNotification = async (data: NotificationData): Promise<string> => {
   try {
-    // Create timestamp for both createdAt and time fields
-    const timestamp = Timestamp.now();
-    
     const notificationData = {
       ...data,
       read: data.read ?? false,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      // Add a time field that matches the expected format in the UI
-      time: timestamp.toDate().toISOString()
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
     };
 
     const notificationRef = adminDb.collection('notifications').doc();
@@ -54,107 +49,6 @@ export const createTaskAssignmentNotification = async (
     title: 'Task Assigned to You',
     description: `Task '${taskTitle}' in board '${boardTitle}' was assigned to you${assignedByText}`,
     type: 'TASK_ASSIGNMENT',
-    targetId: taskId,
-    userId
-  });
-};
-
-/**
- * Creates a task unassignment notification
- */
-export const createTaskUnassignmentNotification = async (
-  userId: string,
-  taskTitle: string,
-  boardTitle: string,
-  taskId: string,
-  unassignedBy?: string
-): Promise<string> => {
-  const unassignedByText = unassignedBy ? ` by ${unassignedBy}` : '';
-  
-  return createNotification({
-    title: 'Task Unassigned from You',
-    description: `You were unassigned from task '${taskTitle}' in board '${boardTitle}'${unassignedByText}`,
-    type: 'TASK_UNASSIGNMENT',
-    targetId: taskId,
-    userId
-  });
-};
-
-/**
- * Creates a due date changed notification
- */
-export const createDueDateChangedNotification = async (
-  userId: string,
-  taskTitle: string,
-  boardTitle: string,
-  taskId: string,
-  newDueDate: Date,
-  changedBy?: string
-): Promise<string> => {
-  const changedByText = changedBy ? ` by ${changedBy}` : '';
-  const formattedDate = newDueDate.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
-  
-  return createNotification({
-    title: 'Due Date Changed',
-    description: `Due date for task '${taskTitle}' in board '${boardTitle}' was changed to ${formattedDate}${changedByText}`,
-    type: 'DUE_DATE_CHANGED',
-    targetId: taskId,
-    userId
-  });
-};
-
-/**
- * Creates a due date approaching notification
- */
-export const createDueDateApproachingNotification = async (
-  userId: string,
-  taskTitle: string,
-  boardTitle: string,
-  taskId: string,
-  dueDate: Date
-): Promise<string> => {
-  const formattedDate = dueDate.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
-  
-  return createNotification({
-    title: 'Due Date Approaching',
-    description: `Task '${taskTitle}' in board '${boardTitle}' is due soon (${formattedDate})`,
-    type: 'DUE_DATE_APPROACHING',
-    targetId: taskId,
-    userId
-  });
-};
-
-/**
- * Creates an overdue task notification
- */
-export const createOverdueTaskNotification = async (
-  userId: string,
-  taskTitle: string,
-  boardTitle: string,
-  taskId: string,
-  dueDate: Date
-): Promise<string> => {
-  const formattedDate = dueDate.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
-  
-  return createNotification({
-    title: 'Task Overdue',
-    description: `Task '${taskTitle}' in board '${boardTitle}' is overdue (was due on ${formattedDate})`,
-    type: 'TASK_OVERDUE',
     targetId: taskId,
     userId
   });
@@ -239,25 +133,6 @@ export const createDueDateReminderNotification = async (
     description: `Task '${taskTitle}' in board '${boardTitle}' is due on ${formattedDate}`,
     type: 'DUE_DATE_REMINDER',
     targetId: taskId,
-    userId
-  });
-};
-
-/**
- * Creates a notification when a member accepts a board invitation
- */
-export const createInvitationAcceptedNotification = async (
-  userId: string,     // Board owner/admin who will receive the notification
-  memberName: string, // Name of the person who accepted the invitation
-  memberEmail: string,
-  boardTitle: string,
-  boardId: string
-): Promise<string> => {
-  return createNotification({
-    title: 'Invitation Accepted',
-    description: `${memberName || memberEmail} accepted your invitation to board '${boardTitle}'`,
-    type: 'INVITATION_ACCEPTED',
-    targetId: boardId,
     userId
   });
 };

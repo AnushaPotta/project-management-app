@@ -135,7 +135,7 @@ export default function Navbar() {
               >
                 Log In
               </Button>
-              <Button colorScheme="blue" onClick={() => router.push("/signup")}>
+              <Button colorScheme="blue" onClick={() => router.push("/register")}>
                 Sign Up
               </Button>
             </Flex>

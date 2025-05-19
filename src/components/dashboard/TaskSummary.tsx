@@ -12,56 +12,35 @@ import {
 } from "@chakra-ui/react";
 
 export default function TaskSummary() {
-  // Use cache-first to reduce Firebase calls but still get updated data when needed
+  // Use refetchOnMount to always get fresh data when the component mounts
   const { data, loading, refetch } = useQuery(GET_TASK_STATS, {
-    fetchPolicy: 'cache-and-network', // Use cache but also update in background
-    nextFetchPolicy: 'cache-first', // Use cache for subsequent renders
-    // Increase the standby time before refetching to reduce Firebase calls
-    pollInterval: 300000, // 5 minutes (300000ms)
+    fetchPolicy: 'network-only', // Don't use cache, always get fresh data
+    nextFetchPolicy: 'cache-first' // After the first fetch, can use cache for subsequent renders
   });
 
-  // Only refetch when component mounts, with a reduced frequency
+  // Force refetch when component mounts to ensure fresh data
   useEffect(() => {
-    // No need to refetch immediately as cache-and-network will do that
-    
-    // Set up a less frequent polling interval to reduce Firebase calls
-    // This is a backup in case the Apollo pollInterval doesn't work as expected
+    refetch();
+    // Set up an interval to refetch data every 10 seconds
     const intervalId = setInterval(() => {
-      console.log("Scheduled task stats refresh");
-      refetch().catch(err => console.error("Error refreshing task stats:", err));
-    }, 300000); // 5 minutes (300000ms)
+      refetch();
+    }, 10000);
     
     return () => clearInterval(intervalId);
   }, [refetch]);
   
-  // Remove the additional immediate refetch effect that was causing duplicate calls
+  // Additional effect for manual refetch and logging on mount
+  useEffect(() => {
+    if (!loading && data?.taskStats) {
+      console.log("Triggering an immediate refetch of task stats...");
+      refetch().then(result => {
+        console.log("Manual refetch result:", result.data?.taskStats);
+      });
+    }
+  }, [loading, data, refetch]);
 
   if (loading) {
-    return (
-      <Box p={5} shadow="md" borderWidth="1px" borderRadius="md">
-        <StatGroup>
-          <Stat>
-            <StatLabel><Skeleton height="20px" width="80px" /></StatLabel>
-            <StatNumber><Skeleton height="24px" width="40px" /></StatNumber>
-          </Stat>
-
-          <Stat>
-            <StatLabel><Skeleton height="20px" width="80px" /></StatLabel>
-            <StatNumber><Skeleton height="24px" width="40px" /></StatNumber>
-          </Stat>
-
-          <Stat>
-            <StatLabel><Skeleton height="20px" width="80px" /></StatLabel>
-            <StatNumber><Skeleton height="24px" width="40px" /></StatNumber>
-          </Stat>
-
-          <Stat>
-            <StatLabel><Skeleton height="20px" width="80px" /></StatLabel>
-            <StatNumber><Skeleton height="24px" width="40px" /></StatNumber>
-          </Stat>
-        </StatGroup>
-      </Box>
-    );
+    return <Skeleton height="100px" />;
   }
   
   // Get the stats directly from GraphQL without any transformation

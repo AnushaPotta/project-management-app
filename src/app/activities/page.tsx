@@ -99,10 +99,9 @@ export default function ActivitiesPage() {
           <Text>Failed to load activities</Text>
         </Box>
       ) : uniqueActivities.length === 0 ? (
-        <Box textAlign="center" py={12} bg="gray.50" borderRadius="md">
-          <Icon as={FiActivity} w={14} h={14} color="gray.400" mb={4} />
-          <Text fontSize="lg" fontWeight="medium">No activity found</Text>
-          <Text mt={2} color="gray.600">When you start working on boards and tasks, activity will appear here.</Text>
+        <Box textAlign="center" py={10} bg="gray.50" borderRadius="md">
+          <Icon as={FiActivity} w={10} h={10} color="gray.400" mb={3} />
+          <Text fontSize="lg">No activity found</Text>
         </Box>
       ) : (
         <>
