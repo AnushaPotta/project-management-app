@@ -182,20 +182,17 @@ function LoginContent() {
           <Text color="gray.600">Log in to your TaskFlow account</Text>
         </Box>
 
-        <Box width="100%">
-          <Button
-            leftIcon={<FcGoogle />}
-            onClick={handleGoogleSignIn}
-            isLoading={isGoogleLoading}
-            loadingText="Signing in with Google..."
-            variant="outline"
-            size="lg"
-            width="100%"
-            disabled={isEmailLoading || isResetLoading}
-          >
-            Log in with Google
-          </Button>
-        </Box>
+        <Button
+          leftIcon={<FcGoogle />}
+          onClick={handleGoogleSignIn}
+          isLoading={isGoogleLoading}
+          loadingText="Signing in with Google..."
+          variant="outline"
+          size="lg"
+          disabled={isEmailLoading || isResetLoading}
+        >
+          Log in with Google
+        </Button>
 
         <Flex align="center">
           <Divider />
@@ -214,7 +211,6 @@ function LoginContent() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                autoComplete="email"
               />
               {errors.email && (
                 <FormErrorMessage>{errors.email}</FormErrorMessage>
@@ -228,7 +224,6 @@ function LoginContent() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                autoComplete="current-password"
               />
               {errors.password && (
                 <FormErrorMessage>{errors.password}</FormErrorMessage>
@@ -261,11 +256,12 @@ function LoginContent() {
 
         <Text textAlign="center">
           Don&apos;t have an account?{" "}
-          <Box as="span" color="blue.500">
-            <Link href="/register">
-              Sign up
-            </Link>
-          </Box>
+          <Link
+            href="/register"
+            style={{ color: "var(--chakra-colors-brand-500)" }}
+          >
+            Sign up
+          </Link>
         </Text>
       </VStack>
     </Container>

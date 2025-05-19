@@ -6,8 +6,6 @@ import {
   Text,
   Divider,
   useColorModeValue,
-  IconButton,
-  HStack,
 } from "@chakra-ui/react";
 import {
   FiHome,
@@ -16,10 +14,9 @@ import {
   FiUsers,
   FiPieChart,
   FiSettings,
-  FiX,
 } from "react-icons/fi";
 import { useRouter } from "next/navigation";
-import { usePathname } from "next/navigation";
+import { usePathname } from "next/navigation"; // Add this import
 import NextLink from "next/link";
 
 const SidebarItem = ({ icon, label, path, active = false }) => {
@@ -47,37 +44,28 @@ const SidebarItem = ({ icon, label, path, active = false }) => {
   );
 };
 
-interface DashboardSidebarProps {
-  closeDrawer?: () => void;
-}
-
-export default function DashboardSidebar({ closeDrawer }: DashboardSidebarProps) {
+export default function DashboardSidebar() {
   const router = useRouter();
-  const pathname = usePathname(); 
+  const pathname = usePathname(); // Use usePathname instead of router.pathname
   const bgColor = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.700");
 
   const handleLogoClick = () => {
     router.push('/');
-    if (closeDrawer) closeDrawer();
-  };
-
-  const handleNavigation = (path: string) => {
-    if (closeDrawer) closeDrawer();
   };
 
   return (
     <Box
       borderRight="1px"
       borderColor={borderColor}
-      w="full"
+      w="240px"
       h="100vh"
       py={5}
       bg={bgColor}
-      position="relative"
+      position="sticky"
       top={0}
     >
-      <HStack justify="space-between" px={4} mb={6}>
+      <VStack align="center" mb={6}>
         <Text 
           fontSize="2xl" 
           fontWeight="bold"
@@ -88,69 +76,48 @@ export default function DashboardSidebar({ closeDrawer }: DashboardSidebarProps)
         >
           TaskFlow
         </Text>
-        {closeDrawer && (
-          <IconButton
-            aria-label="Close menu"
-            icon={<FiX />}
-            size="sm"
-            variant="ghost"
-            onClick={closeDrawer}
-          />
-        )}
-      </HStack>
+      </VStack>
 
       <VStack align="start" spacing={1} px={3}>
-        <Box onClick={() => handleNavigation('/dashboard')}>
-          <SidebarItem
-            icon={FiHome}
-            label="Dashboard"
-            path="/dashboard"
-            active={pathname === "/dashboard"}
-          />
-        </Box>
-        <Box onClick={() => handleNavigation('/boards')}>
-          <SidebarItem
-            icon={FiClipboard}
-            label="Boards"
-            path="/boards"
-            active={pathname.startsWith("/board")}
-          />
-        </Box>
-        <Box onClick={() => handleNavigation('/calendar')}>
-          <SidebarItem
-            icon={FiCalendar}
-            label="Calendar"
-            path="/calendar"
-            active={pathname === "/calendar"}
-          />
-        </Box>
-        <Box onClick={() => handleNavigation('/team')}>
-          <SidebarItem
-            icon={FiUsers}
-            label="Team"
-            path="/team"
-            active={pathname === "/team"}
-          />
-        </Box>
-        <Box onClick={() => handleNavigation('/reports')}>
-          <SidebarItem
-            icon={FiPieChart}
-            label="Reports"
-            path="/reports"
-            active={pathname === "/reports"}
-          />
-        </Box>
+        <SidebarItem
+          icon={FiHome}
+          label="Dashboard"
+          path="/dashboard"
+          active={pathname === "/dashboard"}
+        />
+        <SidebarItem
+          icon={FiClipboard}
+          label="Boards"
+          path="/boards"
+          active={pathname.startsWith("/board")}
+        />
+        <SidebarItem
+          icon={FiCalendar}
+          label="Calendar"
+          path="/calendar"
+          active={pathname === "/calendar"}
+        />
+        <SidebarItem
+          icon={FiUsers}
+          label="Team"
+          path="/team"
+          active={pathname === "/team"}
+        />
+        <SidebarItem
+          icon={FiPieChart}
+          label="Reports"
+          path="/reports"
+          active={pathname === "/reports"}
+        />
 
         <Divider my={6} />
 
-        <Box onClick={() => handleNavigation('/settings')}>
-          <SidebarItem
-            icon={FiSettings}
-            label="Settings"
-            path="/settings"
-            active={pathname === "/settings"}
-          />
-        </Box>
+        <SidebarItem
+          icon={FiSettings}
+          label="Settings"
+          path="/settings"
+          active={pathname === "/settings"}
+        />
       </VStack>
     </Box>
   );
