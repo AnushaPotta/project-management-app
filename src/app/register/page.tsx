@@ -130,6 +130,7 @@ export default function RegisterPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="John Doe"
+            autoComplete="name"
           />
         </FormControl>
 
@@ -140,6 +141,7 @@ export default function RegisterPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="john@example.com"
+            autoComplete="email"
           />
         </FormControl>
 
@@ -150,6 +152,7 @@ export default function RegisterPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="********"
+            autoComplete="new-password"
           />
         </FormControl>
 
@@ -164,9 +167,11 @@ export default function RegisterPage() {
 
         <Text>
           Already have an account?{" "}
-          <Link color="blue.500" href="/login">
-            Log in
-          </Link>
+          <Box as="span" color="blue.500">
+            <Link href="/login">
+              Log in
+            </Link>
+          </Box>
         </Text>
       </VStack>
     </Box>
