@@ -48,7 +48,12 @@ import { useLazyQuery, useQuery, useMutation } from "@apollo/client";
 import { SEARCH_QUERY } from "@/graphql/search";
 import { GET_NOTIFICATIONS, MARK_NOTIFICATION_READ, MARK_ALL_NOTIFICATIONS_READ } from "@/graphql/notifications";
 
-export default function DashboardHeader() {
+interface DashboardHeaderProps {
+  showMenuButton?: boolean;
+  onMenuClick?: () => void;
+}
+
+export default function DashboardHeader({ showMenuButton = false, onMenuClick }: DashboardHeaderProps) {
   const { user } = useAuth();
   const router = useRouter();
   const bgColor = useColorModeValue("white", "gray.800");
@@ -165,15 +170,27 @@ export default function DashboardHeader() {
 
   return (
     <Box
-      py={2}
-      px={4}
-      borderBottomWidth="1px"
+      as="header"
       bg={bgColor}
+      px={4}
+      py={2}
+      borderBottomWidth="1px"
+      boxShadow="sm"
       position="sticky"
       top={0}
       zIndex={10}
+      w="100%"
     >
       <Flex justify="space-between" align="center">
+        {showMenuButton && (
+          <IconButton
+            aria-label="Menu"
+            icon={<FiMenu />}
+            variant="ghost"
+            borderRadius="full"
+            onClick={onMenuClick}
+          />
+        )}
         <Popover
           isOpen={isSearchOpen && searchQuery.length > 2}
           onClose={onSearchClose}

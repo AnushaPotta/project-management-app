@@ -131,25 +131,30 @@ function DashboardContent() {
   }
 
   return (
-    <Box>
-      <Heading size="lg" mb={6}>
+    <Box px={{ base: 0, md: 2 }} py={{ base: 2, md: 4 }}>
+      <Heading size={{ base: "md", md: "lg" }} mb={{ base: 4, md: 6 }}>
         Dashboard
       </Heading>
 
       {/* Task summary widget */}
-      <TaskSummary />
+      <Box overflow="hidden" borderRadius="lg">
+        <TaskSummary />
+      </Box>
 
-      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6} mt={6}>
+      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={{ base: 4, md: 6 }} mt={{ base: 4, md: 6 }}>
         {/* Recent activity feed */}
-        <RecentActivity />
+        <Box overflow="hidden" borderRadius="lg">
+          <RecentActivity />
+        </Box>
 
         {/* Upcoming deadlines */}
-        <UpcomingDeadlines />
+        <Box overflow="hidden" borderRadius="lg">
+          <UpcomingDeadlines />
+        </Box>
       </SimpleGrid>
 
       {/* Board list */}
-      <Box mt={8}>
-
+      <Box mt={{ base: 6, md: 8 }} overflow="hidden" borderRadius="lg">
         <BoardList
           boards={data?.boards || []}
           onBoardClick={handleBoardClick}

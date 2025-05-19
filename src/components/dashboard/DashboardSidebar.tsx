@@ -19,7 +19,15 @@ import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation"; // Add this import
 import NextLink from "next/link";
 
-const SidebarItem = ({ icon, label, path, active = false }) => {
+interface SidebarItemProps {
+  icon: React.ElementType;
+  label: string;
+  path: string;
+  active?: boolean;
+  onClick?: () => void;
+}
+
+const SidebarItem = ({ icon, label, path, active = false, onClick }: SidebarItemProps) => {
   const activeBg = useColorModeValue("blue.50", "blue.900");
   const activeColor = useColorModeValue("blue.600", "blue.200");
   const hoverBg = useColorModeValue("gray.100", "gray.700");
@@ -36,6 +44,7 @@ const SidebarItem = ({ icon, label, path, active = false }) => {
         color={active ? activeColor : "inherit"}
         _hover={{ bg: hoverBg }}
         w="100%"
+        onClick={onClick}
       >
         <Icon as={icon} mr={4} fontSize="16" />
         <Text fontWeight={active ? "semibold" : "medium"}>{label}</Text>
@@ -44,7 +53,11 @@ const SidebarItem = ({ icon, label, path, active = false }) => {
   );
 };
 
-export default function DashboardSidebar() {
+interface DashboardSidebarProps {
+  onNavigate?: () => void;
+}
+
+export default function DashboardSidebar({ onNavigate }: DashboardSidebarProps) {
   const router = useRouter();
   const pathname = usePathname(); // Use usePathname instead of router.pathname
   const bgColor = useColorModeValue("white", "gray.800");
@@ -54,16 +67,20 @@ export default function DashboardSidebar() {
     router.push('/');
   };
 
+  // Handler that combines navigation with closing the drawer on mobile
+  const handleNavigation = () => {
+    if (onNavigate) onNavigate();
+  };
+
   return (
     <Box
       borderRight="1px"
       borderColor={borderColor}
-      w="240px"
+      w={{ base: "100%", lg: "240px" }}
       h="100vh"
       py={5}
       bg={bgColor}
-      position="sticky"
-      top={0}
+      overflowY="auto"
     >
       <VStack align="center" mb={6}>
         <Text 
@@ -84,30 +101,35 @@ export default function DashboardSidebar() {
           label="Dashboard"
           path="/dashboard"
           active={pathname === "/dashboard"}
+          onClick={handleNavigation}
         />
         <SidebarItem
           icon={FiClipboard}
           label="Boards"
           path="/boards"
           active={pathname.startsWith("/board")}
+          onClick={handleNavigation}
         />
         <SidebarItem
           icon={FiCalendar}
           label="Calendar"
           path="/calendar"
           active={pathname === "/calendar"}
+          onClick={handleNavigation}
         />
         <SidebarItem
           icon={FiUsers}
           label="Team"
           path="/team"
           active={pathname === "/team"}
+          onClick={handleNavigation}
         />
         <SidebarItem
           icon={FiPieChart}
           label="Reports"
           path="/reports"
           active={pathname === "/reports"}
+          onClick={handleNavigation}
         />
 
         <Divider my={6} />
@@ -117,6 +139,7 @@ export default function DashboardSidebar() {
           label="Settings"
           path="/settings"
           active={pathname === "/settings"}
+          onClick={handleNavigation}
         />
       </VStack>
     </Box>
