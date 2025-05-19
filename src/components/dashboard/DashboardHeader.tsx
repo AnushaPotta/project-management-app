@@ -40,7 +40,7 @@ import {
   Spinner,
   VStack,
 } from "@chakra-ui/react";
-import { FiSearch, FiBell, FiHelpCircle, FiSettings, FiCheckCircle, FiInfo, FiBookOpen, FiCode, FiMessageSquare, FiFile, FiCheck } from "react-icons/fi";
+import { FiSearch, FiBell, FiHelpCircle, FiSettings, FiCheckCircle, FiInfo, FiBookOpen, FiCode, FiMessageSquare, FiFile, FiCheck, FiMenu } from "react-icons/fi";
 import { useAuth } from "@/contexts/auth-context";
 import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
